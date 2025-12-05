@@ -1,0 +1,33 @@
+<?php
+
+return [
+    'page' => 'صفحة',
+    'tax_fetch_success' => 'تم جلب الضريبة بنجاح.',
+    'zatca_tax_code_required' => 'كود ضريبة الزكاة مطلوب.',
+    'zatca_tax_exemption_code_required' => 'كود إعفاء ضريبة الزكاة مطلوب.',
+    'zatca_tax_exemption_reason_required' => 'سبب إعفاء ضريبة الزكاة مطلوب.',
+    'taxes_fetch_success' => 'تم جلب قائمة الضرائب بنجاح.',
+    'tax_saved_success' => 'تم حفظ الضريبة بنجاح.',
+    'tax_delete_success' => 'تم حذف الضريبة بنجاح.',
+    'file_visibility_fetch_success' => 'تم جلب قائمة انواع الملفات بنجاح.',
+    'project_type_fetch_success' => 'تم جلب قائمة انواع المشروع بنجاح.',
+    'otp_not_found' => 'رمز التحقق غير موجود أو انتهت صلاحيته.',
+    'signature_and_stamp_actions_not_found' => 'تم إتمام جميع الإجراءات.',
+    'signature_and_stamp_actions_completed' => 'تم إتمام جميع الإجراءات.',
+    'otp_sent' => 'تم ارسال رمز التحقق عبر : :bearer.',
+    'otp_wait_expired_at' => 'انتهت صلاحية رمز التحقق.',
+    'otp_bearers' => [
+        'mobile' => 'الجوال',
+        'email' => 'البريد الالكتروني',
+        'whatsapp' => 'واتساب',
+    ],
+    'stamp_title_too_long' => 'العنوان طويل جدا',
+    'tax_number' => 'الرقم الضريبي',
+    'mobile' => 'الهاتف',
+    'registeration_number' => 'ترخيص رقم',
+    'unified_no' => 'الرقم الوطني الموحد',
+    'fcm_token_updated_successfully' => 'تم تحديث رمز FCM بنجاح',
+    'shifts_fetch_success' => 'تم جلب قائمة الورود بنجاح',
+    'partner_saved_success' => 'تم حفظ الشريك بنجاح',
+    'partner_fetch_success' => 'تم جلب قائمة الشركات بنجاح',
+];

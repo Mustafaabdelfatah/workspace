@@ -1,0 +1,56 @@
+<?php
+namespace Modules\ProjectManagement\App\GraphQL\Mutations\Project;
+
+use GraphQL\Type\Definition\Type;
+use Rebing\GraphQL\Support\Mutation;
+use Rebing\GraphQL\Support\Facades\GraphQL;
+use Modules\ProjectManagement\App\Models\Project;
+use Illuminate\Support\Facades\Auth;
+
+class ChangeProjectStatusMutation extends Mutation
+{
+    protected $attributes = [
+        'name' => 'changeProjectStatus',
+    ];
+
+    public function type(): Type
+    {
+        return GraphQL::type('Project');
+    }
+
+    public function args(): array
+    {
+        return [
+            'id' => [
+                'name' => 'id',
+                'type' => Type::nonNull(Type::int()),
+            ],
+            'status' => [
+                'name' => 'status',
+                'type' => Type::nonNull(Type::string()),
+            ],
+        ];
+    }
+
+    public function rules(array $args = []): array
+    {
+        return [
+            'id' => ['required', 'exists:projects,id'],
+            'status' => ['required', 'in:planning,active,on_hold,completed,cancelled'],
+        ];
+    }
+
+    public function resolve($root, $args)
+    {
+        $user = Auth::user();
+        $project = Project::findOrFail($args['id']);
+
+        if ($project->owner_id !== $user->id && !$user->is_admin) {
+            throw new \Exception('No permission to change project status');
+        }
+
+        $project->update(['status' => $args['status']]);
+
+        return $project->fresh();
+    }
+}

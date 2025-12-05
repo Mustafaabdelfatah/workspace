@@ -1,0 +1,57 @@
+image: node:latest
+default:
+  tags:
+    - workspacesystem
+before_script:
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
+  - eval $(ssh-agent -s)
+  - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+  - ssh-keyscan -p 2277 -H ${CI_SUB_NAME}.${CI_SERVER_NAME} >> ~/.ssh/known_hosts
+  - ssh-keyscan -H gitlab.nahidh.sa >> ~/.ssh/known_hosts
+  - '[ -f ~/.ssh/known_hosts ] && chmod 644 ~/.ssh/known_hosts || echo "known_hosts does not exist"'
+  - git config --global user.email "abdullah@gsit.me"
+  - git config --global user.name "abdullah N"
+
+stages:
+  - development
+  - production
+
+.pull: &pull_main_dev
+  stage: development
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $submodule == null'
+  script:
+    - |
+      ssh -p 2277 web-user@${CI_SUB_NAME}.${CI_SERVER_NAME} "
+      cd /var/www/${CI_SUB_NAME}.${CI_SERVER_NAME}/backend &&
+      git fetch --all
+      git checkout main
+      git reset --hard origin/main
+      git pull origin main
+      git submodule sync
+      git submodule update --init --recursive
+      git submodule foreach 'git fetch --all && git checkout main && git reset --hard origin/main && git pull origin main'
+      composer install &&
+      php artisan config:clear && 
+      php artisan cache:clear &&
+      php artisan view:clear &&
+      php artisan migrate --force &&
+      php artisan core:sync-modules-table &&
+      composer dump-autoload
+      "
+
+pull_main_dev_law:
+  <<: *pull_main_dev
+  variables:
+    CI_SERVER_NAME: "nahidh.sa"
+    CI_SUB_NAME: "bayyn"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $submodule == null'
+pull_main_dev_car:
+  <<: *pull_main_dev
+  variables:
+    CI_SERVER_NAME: "nahidh.sa"
+    CI_SUB_NAME: "cars"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $submodule == null'
