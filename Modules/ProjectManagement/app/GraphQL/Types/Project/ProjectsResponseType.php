@@ -3,10 +3,7 @@ namespace Modules\ProjectManagement\App\GraphQL\Types\Project;
 
 use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Type as GraphQLType;
-
 use Rebing\GraphQL\Support\Facades\GraphQL;
-
-
 
 class ProjectsResponseType extends GraphQLType
 {
@@ -17,11 +14,21 @@ class ProjectsResponseType extends GraphQLType
     public function fields(): array
     {
         return [
-            'data' => [
-                'type' => Type::listOf(GraphQL::type('Project')),
+            'status' => [
+                'type' => Type::nonNull(Type::boolean()),
+                'description' => 'Response status'
             ],
-            'pagination' => [
+            'message' => [
+                'type' => Type::nonNull(Type::string()),
+                'description' => 'Response message'
+            ],
+            'records' => [
+                'type' => Type::listOf(GraphQL::type('Project')),
+                'description' => 'Project records'
+            ],
+            'paging' => [
                 'type' => GraphQL::type('Paging'),
+                'description' => 'Pagination information'
             ],
         ];
     }

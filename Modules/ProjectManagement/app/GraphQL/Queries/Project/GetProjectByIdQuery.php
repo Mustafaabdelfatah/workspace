@@ -39,7 +39,9 @@ class GetProjectByIdQuery extends Query
         }
 
         return [
-            'data' => $project
+            'status' => true,
+            'message' => 'lang_data_found',
+            'record' => $project
         ];
     }
 }

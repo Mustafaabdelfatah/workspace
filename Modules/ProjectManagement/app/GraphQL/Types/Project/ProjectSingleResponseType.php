@@ -14,8 +14,17 @@ class ProjectSingleResponseType extends GraphQLType
     public function fields(): array
     {
         return [
-            'data' => [
+            'status' => [
+                'type' => Type::nonNull(Type::boolean()),
+                'description' => 'Response status'
+            ],
+            'message' => [
+                'type' => Type::nonNull(Type::string()),
+                'description' => 'Response message'
+            ],
+            'record' => [
                 'type' => GraphQL::type('Project'),
+                'description' => 'Project record'
             ],
         ];
     }

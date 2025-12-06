@@ -50,7 +50,6 @@ class GetProjectsQuery extends Query
 
     public function resolve($root, $args)
     {
-
         $user = Auth::user();
         $query = Project::query();
 
@@ -98,10 +97,11 @@ class GetProjectsQuery extends Query
                           ->paginate($perPage, ['*'], 'page', $page);
 
         return [
-            'data' => $paginator->items(),
-            'pagination' => [
+            'status' => true,
+            'message' => 'lang_data_found',
+            'records' => $paginator->items(),
+            'paging' => [
                 'total' => $paginator->total(),
-                'per_page' => $paginator->perPage(),
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
                 'from' => $paginator->firstItem(),

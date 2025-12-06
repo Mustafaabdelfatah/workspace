@@ -2,6 +2,7 @@
 namespace Modules\ProjectManagement\App\GraphQL\Types\Project;
 
 use GraphQL\Type\Definition\Type;
+use Rebing\GraphQL\Support\Facades\GraphQL;
 use Rebing\GraphQL\Support\Type as GraphQLType;
 
 class ProjectType extends GraphQLType
@@ -54,22 +55,22 @@ class ProjectType extends GraphQLType
                 'type' => Type::int(),
             ],
             'workspace' => [
-                'type' => \GraphQL::type('Workspace'),
+                'type' => GraphQL::type('Workspace'),
             ],
             'owner' => [
-                'type' => \GraphQL::type('User'),
+                'type' => GraphQL::type('User'),
             ],
             'manager' => [
-                'type' => \GraphQL::type('User'),
+                'type' => GraphQL::type('User'),
             ],
             'tasks' => [
-                'type' => Type::listOf(\GraphQL::type('Task')),
+                'type' => Type::listOf(GraphQL::type('Task')),
                 'resolve' => function($project) {
                     return $project->tasks;
                 }
             ],
             'members' => [
-                'type' => Type::listOf(\GraphQL::type('User')),
+                'type' => Type::listOf(GraphQL::type('User')),
                 'resolve' => function($project) {
                     return $project->members;
                 }
