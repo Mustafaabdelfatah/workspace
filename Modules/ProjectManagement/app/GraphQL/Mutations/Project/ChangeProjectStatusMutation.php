@@ -15,7 +15,7 @@ class ChangeProjectStatusMutation extends Mutation
 
     public function type(): Type
     {
-        return GraphQL::type('Project');
+        return GraphQL::type('ChangeProjectStatusResponse');
     }
 
     public function args(): array
@@ -43,14 +43,31 @@ class ChangeProjectStatusMutation extends Mutation
     public function resolve($root, $args)
     {
         $user = Auth::user();
-        $project = Project::findOrFail($args['id']);
 
-        if ($project->owner_id !== $user->id && !$user->is_admin) {
-            throw new \Exception('No permission to change project status');
+        try {
+            $project = Project::findOrFail($args['id']);
+
+            if ($project->owner_id !== $user->id && !$user->is_admin) {
+                return [
+                    'status' => 'error',
+                    'message' => 'No permission to change project status',
+                    'record' => null
+                ];
+            }
+
+            $project->update(['status' => $args['status']]);
+
+            return [
+                'status' => 'success',
+                'message' => 'Project status changed successfully',
+                'record' => $project->fresh()
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => 'Failed to change project status: ' . $e->getMessage(),
+                'record' => null
+            ];
         }
-
-        $project->update(['status' => $args['status']]);
-
-        return $project->fresh();
     }
 }

@@ -21,7 +21,7 @@ class DeleteProjectMutation extends Mutation
 
     public function type(): Type
     {
-        return Type::boolean();
+        return GraphQL::type('DeleteProjectResponse');
     }
 
     public function args(): array
@@ -38,9 +38,24 @@ class DeleteProjectMutation extends Mutation
         $projectId = $args['id'];
 
         try {
-            return $this->projectService->deleteProject($projectId);
+            $result = $this->projectService->deleteProject($projectId);
+
+            if ($result) {
+                return [
+                    'status' => 'success',
+                    'message' => 'Project deleted successfully'
+                ];
+            } else {
+                return [
+                    'status' => 'error',
+                    'message' => 'Failed to delete project'
+                ];
+            }
         } catch (\Exception $e) {
-            throw new \Exception('Failed to delete project: ' . $e->getMessage());
+            return [
+                'status' => 'error',
+                'message' => 'Failed to delete project: ' . $e->getMessage()
+            ];
         }
     }
 }

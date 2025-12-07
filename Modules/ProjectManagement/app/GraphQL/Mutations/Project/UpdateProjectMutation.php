@@ -22,7 +22,7 @@ class UpdateProjectMutation extends Mutation
 
     public function type(): Type
     {
-        return GraphQL::type('Project');
+        return GraphQL::type('UpdateProjectResponse');
     }
 
     public function args(): array
@@ -49,13 +49,27 @@ class UpdateProjectMutation extends Mutation
         $validator = \Validator::make($input, $request->rules(), $request->messages(), $request->attributes());
 
         if ($validator->fails()) {
-            throw new \Exception('Validation failed: ' . $validator->errors()->first());
+            return [
+                'status' => 'error',
+                'message' => 'Validation failed: ' . $validator->errors()->first(),
+                'record' => null
+            ];
         }
 
         try {
-            return $this->projectService->updateProject($projectId, $input);
+            $project = $this->projectService->updateProject($projectId, $input);
+
+            return [
+                'status' => 'success',
+                'message' => 'Project updated successfully',
+                'record' => $project
+            ];
         } catch (\Exception $e) {
-            throw new \Exception('Failed to update project: ' . $e->getMessage());
+            return [
+                'status' => 'error',
+                'message' => 'Failed to update project: ' . $e->getMessage(),
+                'record' => null
+            ];
         }
     }
 }
