@@ -4,7 +4,7 @@ return [
         'query' => [
             'projects' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectsQuery::class,
             'project' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectByIdQuery::class,
-            'projectStats' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectStatsQuery::class,
+            // 'projectStats' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectStatsQuery::class,
         ],
         'mutation' => [
             'createProject' => \Modules\ProjectManagement\App\GraphQL\Mutations\Project\CreateProjectMutation::class,
@@ -16,12 +16,16 @@ return [
             \Modules\ProjectManagement\App\GraphQL\Types\Project\ProjectType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Project\ProjectsResponseType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Project\ProjectSingleResponseType::class,
+            \Modules\ProjectManagement\App\GraphQL\Types\Project\CreateProjectResponseType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Project\ProjectStatsType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Task\TaskType::class,
             \Modules\ProjectManagement\App\GraphQL\Inputs\ProjectInput::class,
             \Modules\ProjectManagement\App\GraphQL\Inputs\ProjectUpdateInput::class,
             \Modules\ProjectManagement\App\GraphQL\Inputs\ProjectFilterInput::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Enums\ProjectStatusEnumType::class,
+            // Add Translatable types from Core module
+            \Modules\Core\GraphQL\Types\TranslatableType::class,
+            \Modules\Core\GraphQL\Types\TranslatableInputType::class,
         ]
     ],
 ];

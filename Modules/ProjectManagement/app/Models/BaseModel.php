@@ -11,16 +11,7 @@ abstract class BaseModel extends Model
      */
     protected function getCoreConnection(): string
     {
-        return config('core.database_connection', 'mysql');
-    }
-
-    /**
-     * Get the core database name
-     */
-    protected function getCoreDatabase(): string
-    {
-        $connection = $this->getCoreConnection();
-        return config("database.connections.{$connection}.database");
+        return config('core.database_connection', 'core');
     }
 
     /**
@@ -35,15 +26,13 @@ abstract class BaseModel extends Model
     }
 
     /**
-     * Get the table name with database prefix
+     * Get the table name - removed database prefix to avoid double prefixing
      */
     public function getTable()
     {
-        if (!isset($this->table)) {
-            return parent::getTable();
-        }
-
-        return $this->getCoreDatabase() . '.' . $this->table;
+        // Just return the table name without database prefix
+        // Laravel will handle the database connection properly
+        return $this->table ?? parent::getTable();
     }
 
     /**

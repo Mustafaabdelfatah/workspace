@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\ProjectManagement\App\Models\ProjectMember;
 use Modules\ProjectManagement\App\Enums\ProjectStatus;
 use Modules\ProjectManagement\App\Enums\ProjectStatusEnum;
+use Modules\ProjectManagement\App\Enums\ProjectTypeEnum;
 
 class Project extends BaseModel
 {
@@ -24,19 +25,34 @@ class Project extends BaseModel
         'status',
         'owner_id',
         'manager_id',
+        'parent_project_id',
+        'project_type',
+        'building_type',
+        // 'company_id', //
+        // 'company_position_id', //
         'start_date',
         'end_date',
-        'settings'
+        'settings',
+        'latitude',
+        'longitude',
+        'area',
+        'area_unit'
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
         'settings' => 'array',
+        'name' => 'array',
+        'description' => 'array',
         'status' => ProjectStatusEnum::class,
+        'project_type' => ProjectTypeEnum::class,
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
+        'area' => 'decimal:2',
     ];
 
-    protected $appends = ['status_label', 'status_color'];
+    protected $appends = ['status_label', 'status_color', 'project_type_label'];
 
     // Relationships
     public function workspace()
@@ -54,6 +70,16 @@ class Project extends BaseModel
         return $this->belongsTo(User::class, 'manager_id');
     }
 
+    public function parentProject()
+    {
+        return $this->belongsTo(Project::class, 'parent_project_id');
+    }
+
+    public function subProjects()
+    {
+        return $this->hasMany(Project::class, 'parent_project_id');
+    }
+
     public function tasks()
     {
         return $this->hasMany(Task::class);
@@ -61,15 +87,21 @@ class Project extends BaseModel
 
     public function members()
     {
-        return $this->belongsToMany(
-            User::class,
-            $this->getCoreDatabase() . '.project_members',
-            'project_id',
-            'user_id'
-        )->withPivot('role', 'joined_at')
-         ->withTimestamps()
-         ->using(ProjectMember::class);
+        return $this->belongsToMany(User::class, 'project_members')
+                    ->withPivot('role', 'joined_at')
+                    ->withTimestamps();
     }
+
+    // Note: Add these relationships when company models are available
+    // public function company()
+    // {
+    //     return $this->belongsTo(Company::class);
+    // }
+
+    // public function companyPosition()
+    // {
+    //     return $this->belongsTo(CompanyPosition::class);
+    // }
 
     // Accessors & Mutators
     public function getStatusLabelAttribute(): string
@@ -80,6 +112,11 @@ class Project extends BaseModel
     public function getStatusColorAttribute(): string
     {
         return $this->status->color();
+    }
+
+    public function getProjectTypeLabelAttribute(): string
+    {
+        return $this->project_type ? $this->project_type->label() : '';
     }
 
     public function getIsActiveAttribute(): bool

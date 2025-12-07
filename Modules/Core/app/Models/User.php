@@ -53,7 +53,7 @@ class User extends Authenticatable
 
     protected $casts = ['password' => 'hashed'];
 
- 
+
 
     /**
      * Define hidden attributes.
@@ -90,7 +90,7 @@ class User extends Authenticatable
 
     protected function getFullNameAttribute()
     {
-       
+
         return $this->name;
     }
 
@@ -179,7 +179,7 @@ class User extends Authenticatable
             ->exists() && ($branchId ? $this->branches()->where('branches.id', $branchId)->exists() : true)) || $this->is_admin;
     }
 
-  
+
 
     public function notifications(): BelongsToMany
     {
@@ -194,9 +194,9 @@ class User extends Authenticatable
         return $this->hasMany(Notification::class, 'sender_id');
     }
 
-    
 
-   
+
+
 
     public function otps()
     {

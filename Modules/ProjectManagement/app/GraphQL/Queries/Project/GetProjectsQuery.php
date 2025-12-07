@@ -4,14 +4,20 @@ namespace Modules\ProjectManagement\App\GraphQL\Queries\Project;
 use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Query;
 use Rebing\GraphQL\Support\Facades\GraphQL;
-use Modules\ProjectManagement\App\Models\Project;
-use Illuminate\Support\Facades\Auth;
+use Modules\ProjectManagement\App\Services\ProjectService;
 
 class GetProjectsQuery extends Query
 {
     protected $attributes = [
         'name' => 'projects',
     ];
+
+    protected $projectService;
+
+    public function __construct(ProjectService $projectService)
+    {
+        $this->projectService = $projectService;
+    }
 
     public function type(): Type
     {
@@ -50,63 +56,46 @@ class GetProjectsQuery extends Query
 
     public function resolve($root, $args)
     {
-        $user = Auth::user();
-        $query = Project::query();
-
-        if (isset($args['filter'])) {
-            $filter = $args['filter'];
-
-            if (isset($filter['workspace_id'])) {
-                $query->where('workspace_id', $filter['workspace_id']);
-            }
-
-            if (isset($filter['status'])) {
-                $query->where('status', $filter['status']);
-            }
-
-            if (isset($filter['owner_id'])) {
-                $query->where('owner_id', $filter['owner_id']);
-            }
-
-            if (isset($filter['search'])) {
-                $query->where(function($q) use ($filter) {
-                    $q->where('name', 'LIKE', '%' . $filter['search'] . '%')
-                      ->orWhere('code', 'LIKE', '%' . $filter['search'] . '%');
-                });
-            }
-        }
-
-        if (!$user->is_admin) {
-            $query->where(function($q) use ($user) {
-                $q->where('owner_id', $user->id)
-                  ->orWhere('manager_id', $user->id)
-                  ->orWhereHas('members', function($memberQuery) use ($user) {
-                      $memberQuery->where('user_id', $user->id);
-                  });
-            });
-        }
-
-        $orderBy = $args['order_by'] ?? 'created_at';
-        $orderDir = $args['order_dir'] ?? 'DESC';
-        $query->orderBy($orderBy, $orderDir);
+        // Merge filters and pagination arguments
+        $filters = array_merge($args['filter'] ?? [], [
+            'order_by' => $args['order_by'] ?? 'created_at',
+            'order_dir' => $args['order_dir'] ?? 'DESC'
+        ]);
 
         $perPage = $args['per_page'] ?? 20;
         $page = $args['page'] ?? 1;
 
-        $paginator = $query->with(['workspace', 'owner', 'manager'])
-                          ->paginate($perPage, ['*'], 'page', $page);
+        // Set request data for pipeline filters
+        request()->merge($filters);
 
-        return [
-            'status' => true,
-            'message' => 'lang_data_found',
-            'records' => $paginator->items(),
-            'paging' => [
-                'total' => $paginator->total(),
-                'current_page' => $paginator->currentPage(),
-                'last_page' => $paginator->lastPage(),
-                'from' => $paginator->firstItem(),
-                'to' => $paginator->lastItem(),
-            ]
-        ];
+        try {
+            $paginator = $this->projectService->getFilteredProjects($filters, $perPage, $page);
+
+            return [
+                'status' => true,
+                'message' => 'lang_data_found',
+                'records' => $paginator->items(),
+                'paging' => [
+                    'total' => $paginator->total(),
+                    'current_page' => $paginator->currentPage(),
+                    'last_page' => $paginator->lastPage(),
+                    'from' => $paginator->firstItem(),
+                    'to' => $paginator->lastItem(),
+                ]
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => false,
+                'message' => 'Error fetching projects: ' . $e->getMessage(),
+                'records' => [],
+                'paging' => [
+                    'total' => 0,
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'from' => 0,
+                    'to' => 0,
+                ]
+            ];
+        }
     }
 }

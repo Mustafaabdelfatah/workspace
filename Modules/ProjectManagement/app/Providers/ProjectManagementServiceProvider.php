@@ -12,6 +12,9 @@ class ProjectManagementServiceProvider extends ServiceProvider
     {
         $this->registerConfig();
         $this->registerGraphQL();
+
+        // Register repository service provider
+        $this->app->register(ProjectManagementRepositoryServiceProvider::class);
     }
 
     protected function registerConfig(): void

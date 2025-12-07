@@ -19,19 +19,50 @@ class ProjectType extends GraphQLType
                 'type' => Type::nonNull(Type::int()),
             ],
             'name' => [
-                'type' => Type::nonNull(Type::string()),
+                'type' => Type::nonNull(GraphQL::type('Translatable')),
+                'resolve' => function($project) {
+                    // If name is stored as JSON with translations
+                    if (is_array($project->name)) {
+                        return $project->name;
+                    }
+                    // If name is a simple string, return it for both languages
+                    return [
+                        'en' => $project->name,
+                        'ar' => $project->name,
+                    ];
+                }
             ],
             'code' => [
                 'type' => Type::nonNull(Type::string()),
             ],
             'description' => [
-                'type' => Type::string(),
+                'type' => GraphQL::type('Translatable'),
+                'resolve' => function($project) {
+                    // If description is stored as JSON with translations
+                    if (is_array($project->description)) {
+                        return $project->description;
+                    }
+                    // If description is a simple string, return it for both languages
+                    return [
+                        'en' => $project->description,
+                        'ar' => $project->description,
+                    ];
+                }
             ],
             'status' => [
                 'type' => Type::string(),
                 'resolve' => function($project) {
                     return $project->status ? $project->status->value : null;
                 }
+            ],
+            'project_type' => [
+                'type' => Type::string(),
+                'resolve' => function($project) {
+                    return $project->project_type ? $project->project_type->value : null;
+                }
+            ],
+            'building_type' => [
+                'type' => Type::string(),
             ],
             'start_date' => [
                 'type' => Type::string(),
@@ -54,6 +85,27 @@ class ProjectType extends GraphQLType
             'manager_id' => [
                 'type' => Type::int(),
             ],
+            'parent_project_id' => [
+                'type' => Type::int(),
+            ],
+            'company_id' => [
+                'type' => Type::int(),
+            ],
+            'company_position_id' => [
+                'type' => Type::int(),
+            ],
+            'latitude' => [
+                'type' => Type::float(),
+            ],
+            'longitude' => [
+                'type' => Type::float(),
+            ],
+            'area' => [
+                'type' => Type::float(),
+            ],
+            'area_unit' => [
+                'type' => Type::string(),
+            ],
             'workspace' => [
                 'type' => GraphQL::type('Workspace'),
             ],
@@ -62,6 +114,18 @@ class ProjectType extends GraphQLType
             ],
             'manager' => [
                 'type' => GraphQL::type('User'),
+            ],
+            'parent_project' => [
+                'type' => GraphQL::type('Project'),
+                'resolve' => function($project) {
+                    return $project->parentProject;
+                }
+            ],
+            'sub_projects' => [
+                'type' => Type::listOf(GraphQL::type('Project')),
+                'resolve' => function($project) {
+                    return $project->subProjects;
+                }
             ],
             'tasks' => [
                 'type' => Type::listOf(GraphQL::type('Task')),
@@ -85,6 +149,12 @@ class ProjectType extends GraphQLType
                 'type' => Type::int(),
                 'resolve' => function($project) {
                     return $project->members()->count();
+                }
+            ],
+            'sub_projects_count' => [
+                'type' => Type::int(),
+                'resolve' => function($project) {
+                    return $project->subProjects()->count();
                 }
             ],
             'created_at' => [

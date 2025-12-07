@@ -4,14 +4,21 @@ namespace Modules\ProjectManagement\App\GraphQL\Mutations\Project;
 use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Mutation;
 use Rebing\GraphQL\Support\Facades\GraphQL;
-use Modules\ProjectManagement\App\Models\Project;
-use Illuminate\Support\Facades\Auth;
+use Modules\ProjectManagement\App\Http\Requests\UpdateProjectRequest;
+use Modules\ProjectManagement\App\Services\ProjectService;
 
 class UpdateProjectMutation extends Mutation
 {
     protected $attributes = [
         'name' => 'updateProject',
     ];
+
+    protected $projectService;
+
+    public function __construct(ProjectService $projectService)
+    {
+        $this->projectService = $projectService;
+    }
 
     public function type(): Type
     {
@@ -22,45 +29,33 @@ class UpdateProjectMutation extends Mutation
     {
         return [
             'id' => [
-                'name' => 'id',
                 'type' => Type::nonNull(Type::int()),
             ],
             'input' => [
-                'name' => 'input',
-                'type' => GraphQL::type('ProjectUpdateInput'),
-            ],
-        ];
-    }
-
-    public function rules(array $args = []): array
-    {
-        return [
-            'id' => ['required', 'exists:projects,id'],
+                'type' => Type::nonNull(GraphQL::type('ProjectUpdateInput')),
+            ]
         ];
     }
 
     public function resolve($root, $args)
     {
-        $user = Auth::user();
-        $project = Project::findOrFail($args['id']);
-
-        if ($project->owner_id !== $user->id && !$user->is_admin) {
-            throw new \Exception('No permission to update this project');
-        }
-
         $input = $args['input'];
+        $projectId = $args['id'];
 
-        $updateData = [];
-        $fields = ['name', 'description', 'status', 'manager_id', 'start_date', 'end_date'];
+        // Create and validate request
+        $request = new UpdateProjectRequest();
+        $request->merge($input);
 
-        foreach ($fields as $field) {
-            if (isset($input[$field])) {
-                $updateData[$field] = $input[$field];
-            }
+        $validator = \Validator::make($input, $request->rules(), $request->messages(), $request->attributes());
+
+        if ($validator->fails()) {
+            throw new \Exception('Validation failed: ' . $validator->errors()->first());
         }
 
-        $project->update($updateData);
-
-        return $project->fresh()->load(['workspace', 'owner', 'manager']);
+        try {
+            return $this->projectService->updateProject($projectId, $input);
+        } catch (\Exception $e) {
+            throw new \Exception('Failed to update project: ' . $e->getMessage());
+        }
     }
 }
