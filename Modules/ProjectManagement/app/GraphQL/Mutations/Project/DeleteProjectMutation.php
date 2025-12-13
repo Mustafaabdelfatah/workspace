@@ -5,19 +5,20 @@ use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Mutation;
 use Rebing\GraphQL\Support\Facades\GraphQL;
 use Modules\ProjectManagement\App\Services\ProjectService;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLResponseTrait;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLValidationTrait;
 
 class DeleteProjectMutation extends Mutation
 {
+    use GraphQLResponseTrait, GraphQLValidationTrait;
+
     protected $attributes = [
         'name' => 'deleteProject',
     ];
 
-    protected $projectService;
-
-    public function __construct(ProjectService $projectService)
-    {
-        $this->projectService = $projectService;
-    }
+    public function __construct(
+        private ProjectService $projectService
+    ) {}
 
     public function type(): Type
     {
@@ -33,29 +34,25 @@ class DeleteProjectMutation extends Mutation
         ];
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, $args): array
     {
         $projectId = $args['id'];
+
+        // Validate project ID
+        $idValidation = $this->validateWithRules(['id' => $projectId], $this->getProjectIdValidationRules());
+        if ($idValidation !== null) {
+            return $idValidation;
+        }
 
         try {
             $result = $this->projectService->deleteProject($projectId);
 
-            if ($result) {
-                return [
-                    'status' => 'success',
-                    'message' => 'Project deleted successfully'
-                ];
-            } else {
-                return [
-                    'status' => 'error',
-                    'message' => 'Failed to delete project'
-                ];
-            }
+            return $result
+                ? $this->simpleSuccessResponse('Project deleted successfully')
+                : $this->simpleErrorResponse('Failed to delete project');
+
         } catch (\Exception $e) {
-            return [
-                'status' => 'error',
-                'message' => 'Failed to delete project: ' . $e->getMessage()
-            ];
+            return $this->simpleErrorResponse('Failed to delete project: ' . $e->getMessage());
         }
     }
 }

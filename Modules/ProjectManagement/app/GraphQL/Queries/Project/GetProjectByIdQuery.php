@@ -5,20 +5,22 @@ use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Query;
 use Rebing\GraphQL\Support\Facades\GraphQL;
 use Modules\ProjectManagement\App\Services\ProjectService;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLResponseTrait;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLValidationTrait;
+use Modules\ProjectManagement\App\Traits\Services\ProjectPermissionTrait;
 use Illuminate\Support\Facades\Auth;
 
 class GetProjectByIdQuery extends Query
 {
+    use GraphQLResponseTrait, GraphQLValidationTrait, ProjectPermissionTrait;
+
     protected $attributes = [
         'name' => 'project',
     ];
 
-    protected $projectService;
-
-    public function __construct(ProjectService $projectService)
-    {
-        $this->projectService = $projectService;
-    }
+    public function __construct(
+        private ProjectService $projectService
+    ) {}
 
     public function type(): Type
     {
@@ -32,41 +34,42 @@ class GetProjectByIdQuery extends Query
                 'name' => 'id',
                 'type' => Type::nonNull(Type::int()),
             ],
+            'detailed' => [
+                'name' => 'detailed',
+                'type' => Type::boolean(),
+                'defaultValue' => false,
+            ],
         ];
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, array $args): array
     {
+        $projectId = $args['id'];
+
+        // Validate project ID
+        $idValidation = $this->validateWithRules(['id' => $projectId], $this->getProjectIdValidationRules());
+        if ($idValidation !== null) {
+            return $idValidation;
+        }
+
         try {
-            $project = $this->projectService->getProjectById($args['id']);
+            $project = $this->projectService->getProjectById(
+                id: $projectId,
+                detailed: $args['detailed']
+            );
 
             if (!$project) {
-                throw new \Exception('Project not found');
+                return $this->errorResponse('Project not found');
             }
 
-            $user = Auth::user();
-
-            if (!$user->is_admin &&
-                $project->owner_id !== $user->id &&
-                $project->manager_id !== $user->id &&
-                !$project->hasMember($user)) {
-                throw new \Exception('Access denied');
+            // Use the permission trait method
+            if (!$this->hasProjectAccess($project, Auth::user())) {
+                return $this->errorResponse('No permission to access this project');
             }
 
-            // Load relationships
-            $project->load(['workspace', 'owner', 'manager', 'parentProject', 'subProjects', 'tasks', 'members']);
-
-            return [
-                'status' => true,
-                'message' => 'lang_data_found',
-                'record' => $project
-            ];
+            return $this->successResponse('Project retrieved successfully', $project);
         } catch (\Exception $e) {
-            return [
-                'status' => false,
-                'message' => $e->getMessage(),
-                'record' => null
-            ];
+            return $this->errorResponse($e->getMessage());
         }
     }
 }

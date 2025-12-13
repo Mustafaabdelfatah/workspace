@@ -6,16 +6,21 @@ use Modules\ProjectManagement\App\Models\Project;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pipeline\Pipeline;
+use Illuminate\Database\Eloquent\Builder;
+use Modules\ProjectManagement\App\Traits\Repositories\RepositoryHelperTrait;
 
 class ProjectRepository implements ProjectRepositoryInterface
 {
-    protected $model;
+    use RepositoryHelperTrait;
+
+    protected Project $model;
 
     public function __construct(Project $model)
     {
         $this->model = $model;
     }
 
+    // Basic CRUD operations
     public function find(int $id): ?Project
     {
         return $this->model->find($id);
@@ -24,6 +29,13 @@ class ProjectRepository implements ProjectRepositoryInterface
     public function findOrFail(int $id): Project
     {
         return $this->model->findOrFail($id);
+    }
+
+    // Enhanced method with eager loading using trait
+    public function findWithRelations(int $id, array $relations = []): ?Project
+    {
+        $query = $this->model->newQuery();
+        return $this->applyEagerLoading($query, $relations)->find($id);
     }
 
     public function create(array $data): Project
@@ -44,37 +56,69 @@ class ProjectRepository implements ProjectRepositoryInterface
         return $project->delete();
     }
 
+    // Enhanced filtered projects with better performance using trait methods
     public function getFilteredProjects(array $filters, int $perPage = 20, int $page = 1): LengthAwarePaginator
     {
-        $query = app(Pipeline::class)
-            ->send($this->model->newQuery())
-            ->through($this->getFilterPipeline($filters))
-            ->thenReturn();
-
-        return $query->with(['workspace', 'owner', 'manager', 'parentProject'])
-                    ->orderBy($filters['order_by'] ?? 'created_at', $filters['order_dir'] ?? 'DESC')
-                    ->paginate($perPage, ['*'], 'page', $page);
+        return $this->getFilteredProjectsWithRelations($filters, $this->getDefaultProjectRelations(), $perPage, $page);
     }
 
+    public function getFilteredProjectsWithRelations(array $filters, array $relations = [], int $perPage = 20, int $page = 1): LengthAwarePaginator
+    {
+        $query = $this->buildFilteredQuery($filters);
+
+        // Use trait method for eager loading
+        $this->applyEagerLoading($query, $relations);
+
+        // Use trait method for ordering
+        $this->applyOrdering($query, $filters['order_by'] ?? 'created_at', $filters['order_dir'] ?? 'DESC');
+
+        return $query->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    // Workspace projects with eager loading using trait
     public function getProjectsByWorkspace(int $workspaceId): Collection
     {
-        return $this->model->where('workspace_id', $workspaceId)
-                          ->with(['owner', 'manager'])
-                          ->get();
+        return $this->getProjectsByWorkspaceWithRelations($workspaceId, $this->getDefaultProjectRelations());
     }
 
+    public function getProjectsByWorkspaceWithRelations(int $workspaceId, array $relations = []): Collection
+    {
+        $query = $this->buildBaseQuery(['workspace_id' => $workspaceId]);
+
+        // Use trait methods
+        $this->applyEagerLoading($query, $relations);
+        $this->applyOrdering($query);
+
+        return $query->get();
+    }
+
+    // Owner projects with eager loading using trait
     public function getProjectsByOwner(int $ownerId): Collection
     {
-        return $this->model->where('owner_id', $ownerId)
-                          ->with(['workspace', 'manager'])
-                          ->get();
+        $query = $this->model->where('owner_id', $ownerId);
+
+        // Use trait methods
+        $this->applyEagerLoading($query, ['workspace', 'manager']);
+        $this->applyOrdering($query);
+
+        return $query->get();
     }
 
+    // Sub-projects with eager loading using trait
     public function getSubProjects(int $parentProjectId): Collection
     {
-        return $this->model->where('parent_project_id', $parentProjectId)
-                          ->with(['owner', 'manager'])
-                          ->get();
+        return $this->getSubProjectsWithRelations($parentProjectId, $this->getDefaultProjectRelations());
+    }
+
+    public function getSubProjectsWithRelations(int $parentProjectId, array $relations = []): Collection
+    {
+        $query = $this->model->where('parent_project_id', $parentProjectId);
+
+        // Use trait methods
+        $this->applyEagerLoading($query, $relations);
+        $this->applyOrdering($query);
+
+        return $query->get();
     }
 
     public function generateUniqueCode(int $workspaceId): string
@@ -82,9 +126,35 @@ class ProjectRepository implements ProjectRepositoryInterface
         return Project::generateCode($workspaceId);
     }
 
-    /**
-     * Get the filter pipeline classes
-     */
+    // Performance optimized query builder methods
+    public function getProjectStats(int $workspaceId): Collection
+    {
+        return $this->model
+            ->selectRaw('status, COUNT(*) as count, AVG(DATEDIFF(end_date, start_date)) as avg_days')
+            ->where('workspace_id', $workspaceId)
+            ->groupBy('status')
+            ->get();
+    }
+
+    public function getProjectsCountByStatus(int $workspaceId): array
+    {
+        return $this->model
+            ->where('workspace_id', $workspaceId)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+    }
+
+    // Private helper method using trait's buildBaseQuery
+    private function buildFilteredQuery(array $filters): Builder
+    {
+        return app(Pipeline::class)
+            ->send($this->buildBaseQuery($filters))
+            ->through($this->getFilterPipeline($filters))
+            ->thenReturn();
+    }
+
     private function getFilterPipeline(array $filters): array
     {
         return [
@@ -95,11 +165,9 @@ class ProjectRepository implements ProjectRepositoryInterface
             \Modules\ProjectManagement\App\Pipelines\Filters\OwnerFilter::class,
             \Modules\ProjectManagement\App\Pipelines\Filters\ManagerFilter::class,
             \Modules\ProjectManagement\App\Pipelines\Filters\ParentProjectFilter::class,
-            // \Modules\ProjectManagement\App\Pipelines\Filters\CompanyFilter::class, // Uncomment when company module is ready
-            // \Modules\ProjectManagement\App\Pipelines\Filters\CompanyPositionFilter::class, // Uncomment when company module is ready
             \Modules\ProjectManagement\App\Pipelines\Filters\CoordinatesFilter::class,
             \Modules\ProjectManagement\App\Pipelines\Filters\SearchFilter::class,
-            \Modules\ProjectManagement\App\Pipelines\Filters\UserPermissionFilter::class,
+            \Modules\ProjectManagement\App\Pipelines\Filters\DateRangeFilter::class,
         ];
     }
 }

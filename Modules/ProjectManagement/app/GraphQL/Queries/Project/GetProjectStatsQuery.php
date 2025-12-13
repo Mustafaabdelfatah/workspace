@@ -4,13 +4,21 @@ namespace Modules\ProjectManagement\App\GraphQL\Queries\Project;
 use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Query;
 use Rebing\GraphQL\Support\Facades\GraphQL;
-use Modules\ProjectManagement\App\Models\Project;
+use Modules\ProjectManagement\App\Repositories\ProjectRepositoryInterface;
+use Modules\ProjectManagement\App\Traits\Services\ServiceHelperTrait;
+use Illuminate\Support\Facades\Cache;
 
 class GetProjectStatsQuery extends Query
 {
+    use ServiceHelperTrait;
+
     protected $attributes = [
         'name' => 'projectStats',
     ];
+
+    public function __construct(
+        private ProjectRepositoryInterface $projectRepository
+    ) {}
 
     public function type(): Type
     {
@@ -27,13 +35,19 @@ class GetProjectStatsQuery extends Query
         ];
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, array $args): array
     {
-        $query = Project::query();
+        $workspaceId = $args['workspace_id'] ?? null;
+        $cacheKey = $this->generateCacheKey("project_stats", ['workspace_id' => $workspaceId]);
 
-        if (isset($args['workspace_id'])) {
-            $query->where('workspace_id', $args['workspace_id']);
-        }
+        return Cache::remember($cacheKey, $this->getCacheTtl(), function () use ($workspaceId) {
+            return $this->getOptimizedStats($workspaceId);
+        });
+    }
+
+    private function getOptimizedStats(?int $workspaceId): array
+    {
+        // Use optimized raw SQL query to avoid N+1 problems
         $sql = "
             SELECT
                 status,
@@ -41,14 +55,13 @@ class GetProjectStatsQuery extends Query
                 SUM(CASE WHEN DATEDIFF(end_date, start_date) > 0 THEN DATEDIFF(end_date, start_date) ELSE 0 END) as total_days,
                 AVG(CASE WHEN DATEDIFF(end_date, start_date) > 0 THEN DATEDIFF(end_date, start_date) ELSE 0 END) as avg_days
             FROM projects
-            " . (isset($args['workspace_id']) ? "WHERE workspace_id = ?" : "") . "
+            " . ($workspaceId ? "WHERE workspace_id = ?" : "") . "
             GROUP BY status
         ";
 
-        $bindings = isset($args['workspace_id']) ? [$args['workspace_id']] : [];
+        $bindings = $workspaceId ? [$workspaceId] : [];
         $stats = \DB::connection('core')->select($sql, $bindings);
 
-        // Convert to objects with proper types
         return collect($stats)->map(function($stat) {
             return (object) [
                 'status' => $stat->status,

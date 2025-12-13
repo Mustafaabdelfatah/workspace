@@ -6,19 +6,20 @@ use Rebing\GraphQL\Support\Mutation;
 use Rebing\GraphQL\Support\Facades\GraphQL;
 use Modules\ProjectManagement\App\Http\Requests\CreateProjectRequest;
 use Modules\ProjectManagement\App\Services\ProjectService;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLResponseTrait;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLValidationTrait;
 
 class CreateProjectMutation extends Mutation
 {
+    use GraphQLResponseTrait, GraphQLValidationTrait;
+
     protected $attributes = [
         'name' => 'createProject',
     ];
 
-    protected $projectService;
-
-    public function __construct(ProjectService $projectService)
-    {
-        $this->projectService = $projectService;
-    }
+    public function __construct(
+        private ProjectService $projectService
+    ) {}
 
     public function type(): Type
     {
@@ -34,38 +35,21 @@ class CreateProjectMutation extends Mutation
         ];
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, $args): array
     {
         $input = $args['input'];
 
-        // Create and validate request
-        $request = new CreateProjectRequest();
-        $request->merge($input);
-
-        $validator = \Validator::make($input, $request->rules(), $request->messages(), $request->attributes());
-
-        if ($validator->fails()) {
-            return [
-                'status' => 'error',
-                'message' => 'Validation failed: ' . $validator->errors()->first(),
-                'record' => null
-            ];
+        $validationResult = $this->validateInput($input, CreateProjectRequest::class);
+        if ($validationResult !== null) {
+            return $validationResult;
         }
 
         try {
             $project = $this->projectService->createProject($input);
 
-            return [
-                'status' => 'success',
-                'message' => 'Project created successfully',
-                'record' => $project
-            ];
+            return $this->successResponse('Project created successfully', $project);
         } catch (\Exception $e) {
-            return [
-                'status' => 'error',
-                'message' => 'Failed to create project: ' . $e->getMessage(),
-                'record' => null
-            ];
+            return $this->errorResponse('Failed to create project: ' . $e->getMessage());
         }
     }
 }

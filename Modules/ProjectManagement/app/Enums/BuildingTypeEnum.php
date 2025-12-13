@@ -15,7 +15,6 @@ enum BuildingTypeEnum: string
     case HOTEL = 'hotel';
     case HOSPITAL = 'hospital';
     case SCHOOL = 'school';
-
     case FACTORY = 'factory';
     case WAREHOUSE = 'warehouse';
     case WORKSHOP = 'workshop';

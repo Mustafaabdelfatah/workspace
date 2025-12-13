@@ -4,7 +4,7 @@ return [
         'query' => [
             'projects' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectsQuery::class,
             'project' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectByIdQuery::class,
-            // 'projectStats' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectStatsQuery::class,
+            'projectStats' => \Modules\ProjectManagement\App\GraphQL\Queries\Project\GetProjectStatsQuery::class,
         ],
         'mutation' => [
             'createProject' => \Modules\ProjectManagement\App\GraphQL\Mutations\Project\CreateProjectMutation::class,

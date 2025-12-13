@@ -4,14 +4,21 @@ namespace Modules\ProjectManagement\App\GraphQL\Mutations\Project;
 use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Mutation;
 use Rebing\GraphQL\Support\Facades\GraphQL;
-use Modules\ProjectManagement\App\Models\Project;
-use Illuminate\Support\Facades\Auth;
+use Modules\ProjectManagement\App\Services\ProjectService;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLResponseTrait;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLValidationTrait;
 
 class ChangeProjectStatusMutation extends Mutation
 {
+    use GraphQLResponseTrait, GraphQLValidationTrait;
+
     protected $attributes = [
         'name' => 'changeProjectStatus',
     ];
+
+    public function __construct(
+        private ProjectService $projectService
+    ) {}
 
     public function type(): Type
     {
@@ -34,40 +41,29 @@ class ChangeProjectStatusMutation extends Mutation
 
     public function rules(array $args = []): array
     {
-        return [
-            'id' => ['required', 'exists:projects,id'],
-            'status' => ['required', 'in:planning,active,on_hold,completed,cancelled'],
-        ];
+        return array_merge(
+            $this->getProjectIdValidationRules(),
+            $this->getProjectStatusValidationRules()
+        );
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, $args): array
     {
-        $user = Auth::user();
+        // Validate input using the shared validation rules
+        $validationResult = $this->validateWithRules($args, $this->rules($args));
+        if ($validationResult !== null) {
+            return $validationResult;
+        }
 
         try {
-            $project = Project::findOrFail($args['id']);
+            $project = $this->projectService->changeProjectStatus(
+                projectId: $args['id'],
+                status: $args['status']
+            );
 
-            if ($project->owner_id !== $user->id && !$user->is_admin) {
-                return [
-                    'status' => 'error',
-                    'message' => 'No permission to change project status',
-                    'record' => null
-                ];
-            }
-
-            $project->update(['status' => $args['status']]);
-
-            return [
-                'status' => 'success',
-                'message' => 'Project status changed successfully',
-                'record' => $project->fresh()
-            ];
+            return $this->successResponse('Project status changed successfully', $project);
         } catch (\Exception $e) {
-            return [
-                'status' => 'error',
-                'message' => 'Failed to change project status: ' . $e->getMessage(),
-                'record' => null
-            ];
+            return $this->errorResponse($e->getMessage());
         }
     }
 }

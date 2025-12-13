@@ -6,19 +6,20 @@ use Rebing\GraphQL\Support\Mutation;
 use Rebing\GraphQL\Support\Facades\GraphQL;
 use Modules\ProjectManagement\App\Http\Requests\UpdateProjectRequest;
 use Modules\ProjectManagement\App\Services\ProjectService;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLResponseTrait;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLValidationTrait;
 
 class UpdateProjectMutation extends Mutation
 {
+    use GraphQLResponseTrait, GraphQLValidationTrait;
+
     protected $attributes = [
         'name' => 'updateProject',
     ];
 
-    protected $projectService;
-
-    public function __construct(ProjectService $projectService)
-    {
-        $this->projectService = $projectService;
-    }
+    public function __construct(
+        private ProjectService $projectService
+    ) {}
 
     public function type(): Type
     {
@@ -37,39 +38,29 @@ class UpdateProjectMutation extends Mutation
         ];
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, $args): array
     {
         $input = $args['input'];
         $projectId = $args['id'];
 
-        // Create and validate request
-        $request = new UpdateProjectRequest();
-        $request->merge($input);
+        // Validate project ID
+        $idValidation = $this->validateWithRules(['id' => $projectId], $this->getProjectIdValidationRules());
+        if ($idValidation !== null) {
+            return $idValidation;
+        }
 
-        $validator = \Validator::make($input, $request->rules(), $request->messages(), $request->attributes());
-
-        if ($validator->fails()) {
-            return [
-                'status' => 'error',
-                'message' => 'Validation failed: ' . $validator->errors()->first(),
-                'record' => null
-            ];
+        // Validate input data
+        $validationResult = $this->validateInput($input, UpdateProjectRequest::class);
+        if ($validationResult !== null) {
+            return $validationResult;
         }
 
         try {
             $project = $this->projectService->updateProject($projectId, $input);
 
-            return [
-                'status' => 'success',
-                'message' => 'Project updated successfully',
-                'record' => $project
-            ];
+            return $this->successResponse('Project updated successfully', $project);
         } catch (\Exception $e) {
-            return [
-                'status' => 'error',
-                'message' => 'Failed to update project: ' . $e->getMessage(),
-                'record' => null
-            ];
+            return $this->errorResponse('Failed to update project: ' . $e->getMessage());
         }
     }
 }

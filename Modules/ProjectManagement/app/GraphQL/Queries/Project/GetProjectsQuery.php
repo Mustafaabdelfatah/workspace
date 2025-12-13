@@ -5,19 +5,19 @@ use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Query;
 use Rebing\GraphQL\Support\Facades\GraphQL;
 use Modules\ProjectManagement\App\Services\ProjectService;
+use Modules\ProjectManagement\App\Traits\GraphQL\GraphQLResponseTrait;
 
 class GetProjectsQuery extends Query
 {
+    use GraphQLResponseTrait;
+
     protected $attributes = [
         'name' => 'projects',
     ];
 
-    protected $projectService;
-
-    public function __construct(ProjectService $projectService)
-    {
-        $this->projectService = $projectService;
-    }
+    public function __construct(
+        private ProjectService $projectService
+    ) {}
 
     public function type(): Type
     {
@@ -54,48 +54,31 @@ class GetProjectsQuery extends Query
         ];
     }
 
-    public function resolve($root, $args)
+    public function resolve($root, array $args): array
     {
-        // Merge filters and pagination arguments
-        $filters = array_merge($args['filter'] ?? [], [
-            'order_by' => $args['order_by'] ?? 'created_at',
-            'order_dir' => $args['order_dir'] ?? 'DESC'
-        ]);
-
-        $perPage = $args['per_page'] ?? 20;
-        $page = $args['page'] ?? 1;
-
-        // Set request data for pipeline filters
-        request()->merge($filters);
+        $filters = $this->prepareFilters($args);
 
         try {
-            $paginator = $this->projectService->getFilteredProjects($filters, $perPage, $page);
+            $projects = $this->projectService->getFilteredProjects(
+                filters: $filters,
+                perPage: $args['per_page'],
+                page: $args['page']
+            );
 
-            return [
-                'status' => true,
-                'message' => 'lang_data_found',
-                'records' => $paginator->items(),
-                'paging' => [
-                    'total' => $paginator->total(),
-                    'current_page' => $paginator->currentPage(),
-                    'last_page' => $paginator->lastPage(),
-                    'from' => $paginator->firstItem(),
-                    'to' => $paginator->lastItem(),
-                ]
-            ];
+            return $this->successListResponse('Projects retrieved successfully', $projects);
         } catch (\Exception $e) {
-            return [
-                'status' => false,
-                'message' => 'Error fetching projects: ' . $e->getMessage(),
-                'records' => [],
-                'paging' => [
-                    'total' => 0,
-                    'current_page' => 1,
-                    'last_page' => 1,
-                    'from' => 0,
-                    'to' => 0,
-                ]
-            ];
+            return $this->errorListResponse($e->getMessage());
         }
+    }
+
+    private function prepareFilters(array $args): array
+    {
+        $filters = $args['filter'] ?? [];
+
+        // Add ordering to filters
+        $filters['order_by'] = $args['order_by'];
+        $filters['order_dir'] = $args['order_dir'];
+
+        return $filters;
     }
 }
