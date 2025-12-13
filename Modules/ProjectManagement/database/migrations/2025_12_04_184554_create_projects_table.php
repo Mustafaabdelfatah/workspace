@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Modules\ProjectManagement\App\Enums\ProjectStatus;
 use Modules\ProjectManagement\App\Enums\ProjectStatusEnum;
 use Modules\ProjectManagement\App\Enums\ProjectTypeEnum;
 
@@ -23,43 +22,58 @@ return new class extends Migration
         Schema::connection($this->coreConnection)->create('projects', function (Blueprint $table) {
             $table->id();
 
-            $table
-                ->foreignId('workspace_id')
-                ->constrained("{$this->coreDatabase}.workspaces")
-                ->cascadeOnDelete();
-            $table
-                ->foreignId('owner_id')
-                ->constrained("{$this->coreDatabase}.users")
-                ->cascadeOnDelete();
-            $table
-                ->foreignId('manager_id')
-                ->nullable()
-                ->constrained("{$this->coreDatabase}.users")
-                ->nullOnDelete();
+            // Core relationships
+            $table->foreignId('workspace_id')
+                  ->constrained("{$this->coreDatabase}.workspaces")
+                  ->cascadeOnDelete();
 
-            $table->foreignId('parent_project_id')->nullable()->constrained('projects')->nullOnDelete();
+            $table->foreignId('owner_id')
+                  ->constrained("{$this->coreDatabase}.users")
+                  ->cascadeOnDelete();
+
+            $table->foreignId('manager_id')
+                  ->nullable()
+                  ->constrained("{$this->coreDatabase}.users")
+                  ->nullOnDelete();
+
+
+            $table->foreignId('parent_project_id')
+                  ->nullable()
+                  ->constrained('projects')
+                  ->nullOnDelete();
+
+            // Basic project info
             $table->json('name');
             $table->string('code')->unique();
-            $table->json('description')->nullable();
+
+            // Project classification
+            $table->string('user_type')->nullable();
             $table->string('status')->default(ProjectStatusEnum::PLANNING->value);
-            $table->string('project_type')->default(ProjectTypeEnum::RESIDENTIAL->value);
-            $table->string('building_type')->nullable();
-            // $table->foreignId('company_id')->nullable()->constrained('companies')->nullOnDelete();
-            // $table->foreignId('company_position_id')->nullable()->constrained('company_positions')->nullOnDelete();
+            $table->string('project_type')->nullable();
+            $table->string('custom_project_type')->nullable();
+
+            // Workspace validation flag
+            $table->boolean('workspace_details_completed')->default(false);
+
+            // Dates
             $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();
-            $table->json('settings')->nullable();
+
             $table->decimal('latitude', 10, 8)->nullable();
             $table->decimal('longitude', 11, 8)->nullable();
             $table->decimal('area', 10, 2)->nullable();
             $table->string('area_unit')->default('m²')->nullable();
+
+            $table->json('settings')->nullable();
 
             $table->softDeletes();
             $table->timestamps();
 
             $table->index(['workspace_id', 'status']);
             $table->index(['owner_id']);
+            $table->index(['manager_id']);
             $table->index(['code']);
+            $table->index(['parent_project_id']);
         });
     }
 

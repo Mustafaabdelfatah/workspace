@@ -2,192 +2,217 @@
 
 namespace Modules\ProjectManagement\App\Services;
 
-use Modules\ProjectManagement\App\Repositories\ProjectRepositoryInterface;
-use Modules\ProjectManagement\App\Models\Project;
-use Modules\ProjectManagement\App\Enums\ProjectStatusEnum;
-use Modules\ProjectManagement\App\Enums\ProjectTypeEnum;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\Cache;
+use Modules\Core\Models\Workspace;
 use Modules\Core\Models\User;
-use Modules\ProjectManagement\App\Traits\Services\ServiceHelperTrait;
-use Modules\ProjectManagement\App\Traits\Services\ProjectPermissionTrait;
+use Modules\Core\Models\UserGroup;
+use Modules\ProjectManagement\App\Models\Project;
+use Modules\ProjectManagement\App\Models\ProjectInvitation;
+use Modules\ProjectManagement\App\Enums\UserTypeEnum;
+use Modules\ProjectManagement\App\Enums\ProjectTypeEnum;
 
 class ProjectService
 {
-    use ServiceHelperTrait, ProjectPermissionTrait;
-
-    protected ProjectRepositoryInterface $projectRepository;
-
-    // Define relations to eager load for better performance
-    protected array $defaultRelations = [
-        'workspace',
-        'owner',
-        'manager',
-        'parentProject'
-    ];
-
-    protected array $detailedRelations = [
-        'workspace',
-        'owner',
-        'manager',
-        'parentProject',
-        'subProjects',
-        'members'
-    ];
-
-    public function __construct(ProjectRepositoryInterface $projectRepository)
+    public function createProject(array $data): array
     {
-        $this->projectRepository = $projectRepository;
+        try {
+            return \DB::transaction(function () use ($data) {
+                $workspace = $this->validateWorkspace($data['workspace_id']);
+                if (!$workspace['success']) {
+                    return $workspace;
+                }
+
+                $project = $this->createOrUpdateProject($data);
+                $this->processProjectInvitations($project, $data);
+
+                return [
+                    'success' => true,
+                    'message' => empty($data['project_id']) ? 'Project created successfully' : 'Project updated successfully',
+                    'project' => $project->load(['workspace', 'owner', 'invitations.invitedUser', 'invitations.userGroup'])
+                ];
+            });
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
     }
 
-    /**
-     * Create a new project with optimized loading
-     */
-    public function createProject(array $data): Project
+    private function validateWorkspace(int $workspaceId): array
     {
-        $user = $this->getCurrentUser();
-        $projectData = $this->prepareProjectData($data, $user);
+        $workspace = Workspace::find($workspaceId);
 
-        return DB::transaction(function () use ($projectData, $user) {
-            $project = $this->projectRepository->create($projectData);
-            $this->addOwnerAsMember($project, $user);
+        if (!$workspace) {
+            return [
+                'success' => false,
+                'message' => 'Workspace not found'
+            ];
+        }
 
-            // Use trait method for cache clearing
-            $this->clearProjectCaches($project->workspace_id);
-
-            return $project->load($this->defaultRelations);
-        });
+        return [
+            'success' => true,
+            'workspace' => $workspace
+        ];
     }
 
-    /**
-     * Update an existing project with optimized queries
-     */
-    public function updateProject(int $id, array $data): Project
+    private function createOrUpdateProject(array $data): Project
     {
-        $user = $this->getCurrentUser();
+        $projectData = [
+            'workspace_id' => $data['workspace_id'],
+            'name' => $data['name'],
+            'owner_id' => auth()->id(),
+            'user_type' => $data['user_type'] ?? null,
+            'project_type' => $data['project_type'] ?? null,
+            'custom_project_type' => $data['custom_project_type'] ?? null,
+            'start_date' => $data['start_date'] ?? null,
+            'end_date' => $data['end_date'] ?? null,
+        ];
 
-        // Use eager loading to get project with relations in one query
-        $project = $this->projectRepository->findWithRelations($id, ['owner', 'workspace']);
+        if (isset($data['project_type'])) {
+            $workspace = Workspace::find($data['workspace_id']);
+            $projectData['workspace_details_completed'] = $this->isWorkspaceComplete($workspace);
 
-        // Use trait method for permission validation
-        $this->validateUpdatePermission($project, $user);
+            if (!$projectData['workspace_details_completed']) {
+                throw new \Exception('Workspace details must be completed before selecting project type');
+            }
+        }
 
-        $updateData = $this->removeNullValues($data);
+        if (!empty($data['project_id'])) {
+            $project = Project::where('id', $data['project_id'])
+                            ->where('owner_id', auth()->id())
+                            ->firstOrFail();
+            $project->update($projectData);
+            return $project;
+        }
 
-        return DB::transaction(function () use ($project, $updateData) {
-            $updatedProject = $this->projectRepository->update($project->id, $updateData);
+        $projectData['code'] = Project::generateCode($data['workspace_id']);
 
-            // Use trait method for cache clearing
-            $this->clearProjectCaches($project->workspace_id, $project->id);
-
-            return $updatedProject->load($this->defaultRelations);
-        });
-    }
-
-    /**
-     * Delete a project with permission checks
-     */
-    public function deleteProject(int $id): bool
-    {
-        $user = $this->getCurrentUser();
-        $project = $this->projectRepository->findWithRelations($id, ['owner', 'workspace']);
-
-        // Use trait method for permission validation
-        $this->validateDeletePermission($project, $user);
-
-        return DB::transaction(function () use ($project) {
-            // Use trait method for cache clearing
-            $this->clearProjectCaches($project->workspace_id, $project->id);
-
-            return $this->projectRepository->delete($project->id);
-        });
-    }
-
-    /**
-     * Get project by ID with optimized loading
-     */
-    public function getProjectById(int $id, bool $detailed = false): ?Project
-    {
-        $relations = $detailed ? $this->detailedRelations : $this->defaultRelations;
-
-        return Cache::remember(
-            $this->generateCacheKey("project", ['id' => $id, 'relations' => $relations]),
-            $this->getCacheTtl(),
-            fn() => $this->projectRepository->findWithRelations($id, $relations)
+        return Project::updateOrCreate(
+            [
+                'workspace_id' => $data['workspace_id'],
+                'owner_id' => auth()->id(),
+            ],
+            $projectData
         );
     }
 
-    /**
-     * Get projects by workspace with caching and eager loading
-     */
-    public function getProjectsByWorkspace(int $workspaceId, bool $withDetails = false): Collection
+    private function processProjectInvitations(Project $project, array $data): void
     {
-        $relations = $withDetails ? $this->detailedRelations : $this->defaultRelations;
+        if (empty($data['invitations']) || !is_array($data['invitations'])) {
+            return;
+        }
 
-        return Cache::remember(
-            $this->generateCacheKey("workspace_projects", ['workspace_id' => $workspaceId, 'relations' => $relations]),
-            $this->getCacheTtl(),
-            fn() => $this->projectRepository->getProjectsByWorkspaceWithRelations($workspaceId, $relations)
-        );
+        foreach ($data['invitations'] as $invitation) {
+            $this->createOrUpdateProjectInvitation($project, $invitation);
+        }
     }
 
-    /**
-     * Get filtered projects with pagination and eager loading
-     */
-    public function getFilteredProjects(array $filters, int $perPage = 20, int $page = 1): LengthAwarePaginator
+    private function createOrUpdateProjectInvitation(Project $project, array $invitation): void
     {
-        return $this->projectRepository->getFilteredProjectsWithRelations($filters, $this->defaultRelations, $perPage, $page);
+        $role = $invitation['role'] ?? 'member';
+        $message = $invitation['message'] ?? null;
+
+        if (!empty($invitation['user_id'])) {
+            $user = User::find($invitation['user_id']);
+            if (!$user) {
+                throw new \Exception("User with ID {$invitation['user_id']} not found");
+            }
+
+            // Check if invitation already exists for this user (using correct column name)
+            $existingInvitation = ProjectInvitation::where('project_id', $project->id)
+                                                 ->where('invited_user_id', $invitation['user_id'])
+                                                 ->first();
+
+            if (!$existingInvitation) {
+                $project->inviteUser($user, $role, $message);
+            }
+        }
+
+        if (!empty($invitation['group_id'])) {
+            $group = UserGroup::find($invitation['group_id']);
+            if (!$group) {
+                throw new \Exception("Group with ID {$invitation['group_id']} not found");
+            }
+
+            // Check if invitation already exists for this group
+            $existingInvitation = ProjectInvitation::where('project_id', $project->id)
+                                                 ->where('user_group_id', $invitation['group_id'])
+                                                 ->first();
+
+            if (!$existingInvitation) {
+                $project->inviteUserGroup($group, $role, $message);
+            }
+        }
     }
 
-    /**
-     * Get sub-projects with eager loading
-     */
-    public function getSubProjects(int $parentProjectId): Collection
+    private function isWorkspaceComplete(Workspace $workspace): bool
     {
-        return Cache::remember(
-            $this->generateCacheKey("sub_projects", ['parent_id' => $parentProjectId]),
-            $this->getCacheTtl(),
-            fn() => $this->projectRepository->getSubProjectsWithRelations($parentProjectId, $this->defaultRelations)
-        );
+        $requiredFields = [ 'logo_path', 'a4_official_path', 'stamp_path'];
+        foreach ($requiredFields as $field) {
+            if (empty($workspace->$field)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    /**
-     * Change project status efficiently
-     */
-    public function changeProjectStatus(int $projectId, string $status): Project
+    private function getWorkspaceMissingFields(Workspace $workspace): array
     {
-        $user = $this->getCurrentUser();
-        $project = $this->projectRepository->findWithRelations($projectId, ['owner']);
+        $requiredFields = [
+            'name' => 'Workspace Name',
+            'logo_path' => 'Logo',
+            'a4_official_path' => 'Official A4 Template',
+            'stamp_path' => 'Official Stamp'
+        ];
 
-        // Use trait method for permission validation
-        $this->validateUpdatePermission($project, $user);
+        $missing = [];
 
-        return DB::transaction(function () use ($project, $status) {
-            $project->update(['status' => $status]);
-            $this->clearProjectCaches($project->workspace_id, $project->id);
+        foreach ($requiredFields as $field => $label) {
+            if (empty($workspace->$field)) {
+                $missing[] = $label;
+            }
+        }
 
-            return $project->fresh($this->defaultRelations);
-        });
+        return $missing;
     }
 
-    // Private helper methods for cleaner code
-    private function prepareProjectData(array $data, User $user): array
+    public function getWorkspaceStatus(int $workspaceId): array
     {
-        return array_merge([
-            'owner_id' => $user->id,
-            'status' => ProjectStatusEnum::PLANNING->value,
-            'project_type' => ProjectTypeEnum::RESIDENTIAL->value,
-            'area_unit' => 'm²',
-        ], $data, [
-            'code' => $this->projectRepository->generateUniqueCode($data['workspace_id'])
-        ]);
+        $workspace = Workspace::find($workspaceId);
+
+        if (!$workspace) {
+            return [
+                'success' => false,
+                'message' => 'Workspace not found'
+            ];
+        }
+
+        return [
+            'success' => true,
+            'workspace' => $workspace,
+            'is_complete' => $this->isWorkspaceComplete($workspace),
+            'missing_fields' => $this->getWorkspaceMissingFields($workspace)
+        ];
     }
 
-    private function addOwnerAsMember(Project $project, User $user): void
+    public function getUserTypes(): array
     {
-        $project->addMember($user, 'owner');
+        return array_map(function($type) {
+            return [
+                'value' => $type->value,
+                'label' => $type->label()
+            ];
+        }, UserTypeEnum::cases());
+    }
+
+    public function getProjectTypes(): array
+    {
+        return array_map(function($type) {
+            return [
+                'value' => $type->value,
+                'label' => $type->label()
+            ];
+        }, ProjectTypeEnum::cases());
     }
 }

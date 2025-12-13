@@ -4,7 +4,9 @@ namespace Modules\ProjectManagement\App\Models;
 
 use Modules\Core\Models\User;
 use Modules\Core\Models\Workspace;
+use Modules\Core\Models\UserGroup;
 use Modules\ProjectManagement\App\Models\Task;
+use Modules\ProjectManagement\App\Models\ProjectInvitation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\ProjectManagement\App\Models\ProjectMember;
 use Modules\ProjectManagement\App\Enums\ProjectStatus;
@@ -16,20 +18,20 @@ class Project extends BaseModel
     use SoftDeletes;
 
     protected $table = 'projects';
+    protected $translatable = ['name'];
 
     protected $fillable = [
         'workspace_id',
         'name',
         'code',
-        'description',
         'status',
         'owner_id',
         'manager_id',
         'parent_project_id',
+        'user_type',
         'project_type',
-        'building_type',
-        // 'company_id', //
-        // 'company_position_id', //
+        'custom_project_type',
+        'workspace_details_completed',
         'start_date',
         'end_date',
         'settings',
@@ -44,9 +46,9 @@ class Project extends BaseModel
         'end_date' => 'date',
         'settings' => 'array',
         'name' => 'array',
-        'description' => 'array',
         'status' => ProjectStatusEnum::class,
         'project_type' => ProjectTypeEnum::class,
+        'workspace_details_completed' => 'boolean',
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
         'area' => 'decimal:2',
@@ -92,6 +94,11 @@ class Project extends BaseModel
                     ->withTimestamps();
     }
 
+    public function invitations()
+    {
+        return $this->hasMany(ProjectInvitation::class);
+    }
+
     // Note: Add these relationships when company models are available
     // public function company()
     // {
@@ -116,7 +123,15 @@ class Project extends BaseModel
 
     public function getProjectTypeLabelAttribute(): string
     {
+        if ($this->project_type === ProjectTypeEnum::OTHER && $this->custom_project_type) {
+            return $this->custom_project_type;
+        }
         return $this->project_type ? $this->project_type->label() : '';
+    }
+
+    public function getIsWorkspaceValidatedAttribute(): bool
+    {
+        return $this->workspace_details_completed;
     }
 
     public function getIsActiveAttribute(): bool
@@ -143,6 +158,16 @@ class Project extends BaseModel
     public function scopeOwnedBy($query, $userId)
     {
         return $query->where('owner_id', $userId);
+    }
+
+    public function scopeWorkspaceCompleted($query)
+    {
+        return $query->where('workspace_details_completed', true);
+    }
+
+    public function scopeWorkspaceIncomplete($query)
+    {
+        return $query->where('workspace_details_completed', false);
     }
 
     public static function generateCode($workspaceId): string
@@ -175,5 +200,44 @@ class Project extends BaseModel
     public function removeMember(User $user): void
     {
         $this->members()->detach($user->id);
+    }
+
+    public function inviteUser(User $user, string $role = 'member', ?string $message = null): ProjectInvitation
+    {
+        return $this->invitations()->create([
+            'invited_user_id' => $user->id,
+            'email' => $user->email,
+            'role' => $role,
+            'token' => str()->random(64),
+            'invited_by' => auth()->id(),
+            'message' => $message,
+            'expires_at' => now()->addDays(7)
+        ]);
+    }
+
+    public function inviteUserGroup(UserGroup $group, string $role = 'member', ?string $message = null): ProjectInvitation
+    {
+        return $this->invitations()->create([
+            'user_group_id' => $group->id,
+            'role' => $role,
+            'token' => str()->random(64),
+            'invited_by' => auth()->id(),
+            'message' => $message,
+            'expires_at' => now()->addDays(7)
+        ]);
+    }
+
+    public function getPendingInvitations()
+    {
+        return $this->invitations()
+                   ->whereNull('accepted_at')
+                   ->whereNull('declined_at')
+                   ->where('expires_at', '>', now())
+                   ->get();
+    }
+
+    public function markWorkspaceCompleted(): bool
+    {
+        return $this->update(['workspace_details_completed' => true]);
     }
 }

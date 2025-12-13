@@ -21,7 +21,6 @@ class ProjectType extends GraphQLType
             'name' => [
                 'type' => Type::nonNull(GraphQL::type('Translatable')),
                 'resolve' => function($project) {
-                    // If name is stored as JSON with translations
                     if (is_array($project->name)) {
                         return $project->name;
                     }

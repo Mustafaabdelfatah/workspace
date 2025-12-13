@@ -170,4 +170,68 @@ class ProjectRepository implements ProjectRepositoryInterface
             \Modules\ProjectManagement\App\Pipelines\Filters\DateRangeFilter::class,
         ];
     }
+
+    private function getDefaultProjectRelations(): array
+    {
+        return [
+            'workspace',
+            'owner',
+            'manager',
+            'parentProject',
+            'invitations.invitedUser',
+            'invitations.userGroup',
+            'members'
+        ];
+    }
+
+    // Enhanced method to get projects with invitations
+    public function getProjectsWithInvitations(int $workspaceId, array $filters = []): Collection
+    {
+        $query = $this->buildBaseQuery(['workspace_id' => $workspaceId]);
+
+        $this->applyEagerLoading($query, [
+            'invitations' => function($q) {
+                $q->pending();
+            },
+            'workspace',
+            'owner',
+            'manager'
+        ]);
+
+        return $query->get();
+    }
+
+    // Get project by building type
+    public function getProjectsByBuildingType(int $workspaceId, string $buildingType): Collection
+    {
+        $query = $this->model->where('workspace_id', $workspaceId)
+                            ->where('building_type', $buildingType);
+
+        $this->applyEagerLoading($query, $this->getDefaultProjectRelations());
+        $this->applyOrdering($query);
+
+        return $query->get();
+    }
+
+    // Get projects that need workspace details validation
+    public function getProjectsNeedingWorkspaceValidation(int $workspaceId): Collection
+    {
+        $query = $this->model->where('workspace_id', $workspaceId)
+                            ->whereJsonDoesntHave('settings->workspace_validated');
+
+        $this->applyEagerLoading($query, ['workspace', 'owner']);
+
+        return $query->get();
+    }
+
+    // Mark project as workspace validated
+    public function markWorkspaceValidated(int $projectId): bool
+    {
+        $project = $this->findOrFail($projectId);
+        $settings = $project->settings ?? [];
+        $settings['workspace_validated'] = true;
+        $settings['workspace_validated_at'] = now()->toISOString();
+
+        return $project->update(['settings' => $settings]);
+    }
 }

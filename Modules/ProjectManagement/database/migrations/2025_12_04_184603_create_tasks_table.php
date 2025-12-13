@@ -3,12 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Modules\ProjectManagement\App\Enums\TaskStatus;
-use Modules\ProjectManagement\App\Enums\TaskPriority;
-use Modules\ProjectManagement\App\Enums\TaskPriorityEnum;
-use Modules\ProjectManagement\App\Enums\TaskStatusEnum;
-use Modules\ProjectManagement\App\Enums\TaskType;
-use Modules\ProjectManagement\App\Enums\TaskTypeEnum;
 
 return new class extends Migration
 {
@@ -27,40 +21,50 @@ return new class extends Migration
             $table->id();
 
             $table->foreignId('project_id')
-                  ->constrained("{$this->coreDatabase}.projects")
+                  ->constrained('projects')
                   ->cascadeOnDelete();
-            $table->foreignId('assignee_id')
-                  ->nullable()
-                  ->constrained("{$this->coreDatabase}.users")
-                  ->nullOnDelete();
-            $table->foreignId('reporter_id')
-                  ->nullable()
-                  ->constrained("{$this->coreDatabase}.users")
-                  ->nullOnDelete();
+
             $table->foreignId('parent_task_id')
                   ->nullable()
-                  ->constrained("{$this->coreDatabase}.tasks")
+                  ->constrained('tasks')
                   ->nullOnDelete();
-            $table->string('title');
-            $table->text('description')->nullable();
-            $table->string('task_code')->nullable()->unique();
-            $table->string('type')->default(TaskTypeEnum::TASK->value);
-            $table->string('priority')->default(TaskPriorityEnum::MEDIUM->value);
-            $table->string('status')->default(TaskStatusEnum::TODO->value);
-            $table->integer('story_points')->nullable();
-            $table->integer('estimated_hours')->nullable();
-            $table->integer('actual_hours')->nullable()->default(0);
-            $table->date('due_date')->nullable();
-            $table->date('start_date')->nullable();
-            $table->timestamp('completed_at')->nullable();
-            $table->integer('position')->default(0);
+
+            $table->json('title');
+            $table->string('code')->unique();
+            $table->json('description')->nullable();
+
+            $table->string('status')->default('pending');
+            $table->string('priority')->default('medium');
+
+            $table->foreignId('assigned_to')
+                  ->nullable()
+                  ->constrained("{$this->coreDatabase}.users")
+                  ->nullOnDelete();
+
+            $table->foreignId('created_by')
+                  ->constrained("{$this->coreDatabase}.users")
+                  ->cascadeOnDelete();
+
+            $table->datetime('start_date')->nullable();
+            $table->datetime('due_date')->nullable();
+            $table->datetime('completed_at')->nullable();
+
+            $table->decimal('estimated_hours', 8, 2)->nullable();
+            $table->decimal('actual_hours', 8, 2)->nullable();
+            $table->integer('progress_percentage')->default(0);
+
+            $table->json('tags')->nullable();
+            $table->json('settings')->nullable();
+
             $table->softDeletes();
             $table->timestamps();
+
             $table->index(['project_id', 'status']);
-            $table->index(['assignee_id', 'status']);
-            $table->index(['project_id', 'assignee_id']);
+            $table->index(['assigned_to']);
+            $table->index(['created_by']);
+            $table->index(['parent_task_id']);
+            $table->index(['code']);
             $table->index(['due_date']);
-            $table->index(['task_code']);
         });
     }
 

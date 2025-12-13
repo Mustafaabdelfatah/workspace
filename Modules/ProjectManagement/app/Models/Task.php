@@ -1,55 +1,51 @@
 <?php
-// Modules/ProjectManagement/App/Models/Task.php
 
 namespace Modules\ProjectManagement\App\Models;
 
 use Modules\Core\Models\User;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Modules\ProjectManagement\Models\TimeEntry;
-use Modules\ProjectManagement\App\Enums\TaskType;
-use Modules\ProjectManagement\App\Enums\TaskStatus;
-use Modules\ProjectManagement\App\Enums\TaskPriority;
-use Modules\ProjectManagement\App\Enums\TaskTypeEnum;
 use Modules\ProjectManagement\App\Enums\TaskStatusEnum;
 use Modules\ProjectManagement\App\Enums\TaskPriorityEnum;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Task extends BaseModel
 {
     use SoftDeletes;
 
-    protected $table = 'tasks';
-
     protected $fillable = [
         'project_id',
+        'parent_task_id',
         'title',
+        'code',
         'description',
-        'task_code',
-        'type',
-        'priority',
         'status',
-        'assignee_id',
-        'reporter_id',
-        'story_points',
+        'priority',
+        'assigned_to',
+        'created_by',
+        'start_date',
+        'due_date',
+        'completed_at',
         'estimated_hours',
         'actual_hours',
-        'due_date',
-        'start_date',
-        'completed_at',
-        'parent_task_id',
-        'position'
+        'progress_percentage',
+        'tags',
+        'settings'
     ];
 
     protected $casts = [
-        'due_date' => 'date',
-        'start_date' => 'date',
+        'title' => 'array',
+        'description' => 'array',
+        'start_date' => 'datetime',
+        'due_date' => 'datetime',
         'completed_at' => 'datetime',
-        'story_points' => 'integer',
-        'estimated_hours' => 'integer',
-        'actual_hours' => 'integer',
-        'position' => 'integer',
         'status' => TaskStatusEnum::class,
         'priority' => TaskPriorityEnum::class,
-        'type' => TaskTypeEnum::class,
+        'estimated_hours' => 'decimal:2',
+        'actual_hours' => 'decimal:2',
+        'progress_percentage' => 'integer',
+        'tags' => 'array',
+        'settings' => 'array'
     ];
 
     protected $appends = [
@@ -57,34 +53,34 @@ class Task extends BaseModel
         'status_color',
         'priority_label',
         'priority_color',
-        'type_label',
-        'is_overdue'
+        'is_overdue',
+        'days_remaining'
     ];
 
     // Relationships
-    public function project()
+    public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
     }
 
-    public function assignee()
-    {
-        return $this->belongsTo(User::class, 'assignee_id');
-    }
-
-    public function reporter()
-    {
-        return $this->belongsTo(User::class, 'reporter_id');
-    }
-
-    public function parent()
+    public function parentTask(): BelongsTo
     {
         return $this->belongsTo(Task::class, 'parent_task_id');
     }
 
-    public function subtasks()
+    public function subTasks(): HasMany
     {
-        return $this->hasMany(Task::class, 'parent_task_id')->orderBy('position');
+        return $this->hasMany(Task::class, 'parent_task_id');
+    }
+
+    public function assignedTo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function files()
@@ -118,74 +114,156 @@ class Task extends BaseModel
         return $this->priority->color();
     }
 
-    public function getTypeLabelAttribute(): string
-    {
-        return $this->type->label();
-    }
-
     public function getIsOverdueAttribute(): bool
     {
-        if (!$this->due_date || $this->status === TaskStatusEnum::DONE) {
-            return false;
-        }
-
-        return $this->due_date->isPast();
+        return $this->due_date &&
+               $this->due_date->isPast() &&
+               $this->status !== TaskStatusEnum::COMPLETED;
     }
 
-    public function getProgressAttribute(): float
+    public function getDaysRemainingAttribute(): ?int
     {
-        if ($this->estimated_hours > 0) {
-            return min(100, ($this->actual_hours / $this->estimated_hours) * 100);
+        if (!$this->due_date || $this->status === TaskStatusEnum::COMPLETED) {
+            return null;
         }
 
-        return 0;
+        return now()->diffInDays($this->due_date, false);
+    }
+
+    public function getIsCompletedAttribute(): bool
+    {
+        return $this->status === TaskStatusEnum::COMPLETED;
+    }
+
+    public function getTotalSubTasksAttribute(): int
+    {
+        return $this->subTasks()->count();
+    }
+
+    public function getCompletedSubTasksAttribute(): int
+    {
+        return $this->subTasks()->where('status', TaskStatusEnum::COMPLETED->value)->count();
+    }
+
+    public function getSubTaskCompletionPercentageAttribute(): int
+    {
+        $total = $this->total_sub_tasks;
+        if ($total === 0) return 100;
+
+        return round(($this->completed_sub_tasks / $total) * 100);
     }
 
     // Scopes
-    public function scopeInProject($query, $projectId)
+    public function scopeInProject($query, int $projectId)
     {
         return $query->where('project_id', $projectId);
     }
 
-    public function scopeAssignedTo($query, $userId)
+    public function scopeAssignedTo($query, int $userId)
     {
-        return $query->where('assignee_id', $userId);
+        return $query->where('assigned_to', $userId);
+    }
+
+    public function scopeByStatus($query, TaskStatusEnum $status)
+    {
+        return $query->where('status', $status->value);
+    }
+
+    public function scopeByPriority($query, TaskPriorityEnum $priority)
+    {
+        return $query->where('priority', $priority->value);
     }
 
     public function scopeOverdue($query)
     {
         return $query->where('due_date', '<', now())
-                    ->whereNotIn('status', [TaskStatusEnum::DONE->value, TaskStatusEnum::CANCELLED->value]);
+                    ->whereNotIn('status', [TaskStatusEnum::COMPLETED->value, TaskStatusEnum::CANCELLED->value]);
     }
 
-    // Business Logic
-    public static function generateCode($projectId): string
+    public function scopeDueToday($query)
     {
-        $lastTask = self::where('project_id', $projectId)
-                       ->latest()
-                       ->first();
+        return $query->whereDate('due_date', today())
+                    ->whereNotIn('status', [TaskStatusEnum::COMPLETED->value, TaskStatusEnum::CANCELLED->value]);
+    }
+
+    public function scopeMainTasks($query)
+    {
+        return $query->whereNull('parent_task_id');
+    }
+
+    public function scopeSubTasks($query)
+    {
+        return $query->whereNotNull('parent_task_id');
+    }
+
+    // Methods
+    public static function generateCode(int $projectId): string
+    {
+        $project = Project::find($projectId);
+        $lastTask = self::where('project_id', $projectId)->latest()->first();
 
         $nextNumber = $lastTask ?
-            (int) substr($lastTask->task_code, 4) + 1 : 1;
+            (int) substr($lastTask->code, strlen($project->code) + 2) + 1 : 1;
 
-        return 'TSK-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+        return $project->code . '-T' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
     }
 
-    public function markAsCompleted(): void
+    public function canTransitionTo(TaskStatusEnum $newStatus): bool
     {
-        $this->update([
-            'status' => TaskStatusEnum::DONE->value,
-            'completed_at' => now(),
-        ]);
+        return $this->status->canTransitionTo($newStatus);
     }
 
-    public function addTimeEntry($hours, $description = null): TimeEntry
+    public function transitionTo(TaskStatusEnum $newStatus, ?string $note = null): bool
     {
-        return $this->timeEntries()->create([
-            'user_id' => auth()->id(),
-            'hours' => $hours,
-            'description' => $description,
-            'logged_at' => now(),
-        ]);
+        if (!$this->canTransitionTo($newStatus)) {
+            return false;
+        }
+
+        $oldStatus = $this->status;
+        $this->status = $newStatus;
+
+        if ($newStatus === TaskStatusEnum::COMPLETED) {
+            $this->completed_at = now();
+            $this->progress_percentage = 100;
+        } elseif ($oldStatus === TaskStatusEnum::COMPLETED && $newStatus !== TaskStatusEnum::COMPLETED) {
+            $this->completed_at = null;
+        }
+
+        return $this->save();
+    }
+
+    public function updateProgress(int $percentage): bool
+    {
+        $percentage = max(0, min(100, $percentage));
+        $this->progress_percentage = $percentage;
+
+        if ($percentage === 100 && $this->status !== TaskStatusEnum::COMPLETED) {
+            $this->transitionTo(TaskStatusEnum::COMPLETED);
+        } elseif ($percentage > 0 && $this->status === TaskStatusEnum::PENDING) {
+            $this->transitionTo(TaskStatusEnum::IN_PROGRESS);
+        }
+
+        return $this->save();
+    }
+
+    public function assignTo(?User $user): bool
+    {
+        $this->assigned_to = $user?->id;
+        return $this->save();
+    }
+
+    public function getTotalTimeSpent(): float
+    {
+        return $this->timeEntries()->sum('hours');
+    }
+
+    public function getEfficiencyPercentage(): ?float
+    {
+        if (!$this->estimated_hours || $this->estimated_hours <= 0) {
+            return null;
+        }
+
+        $totalTime = $this->getTotalTimeSpent();
+        return ($this->estimated_hours / max($totalTime, 0.1)) * 100;
     }
 }
