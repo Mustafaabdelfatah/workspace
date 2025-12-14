@@ -3,6 +3,7 @@
 namespace Modules\ProjectManagement\App\GraphQL\Types;
 
 use GraphQL\Type\Definition\Type;
+use Rebing\GraphQL\Support\Facades\GraphQL;
 use Rebing\GraphQL\Support\Type as GraphQLType;
 
 class WorkspaceStatusType extends GraphQLType
@@ -20,7 +21,7 @@ class WorkspaceStatusType extends GraphQLType
                 'description' => 'Operation success status'
             ],
             'workspace' => [
-                'type' => \GraphQL::type('ProjectWorkspace'),
+                'type' => GraphQL::type('ProjectWorkspace'),
                 'description' => 'Workspace details'
             ],
             'is_complete' => [

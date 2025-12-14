@@ -26,6 +26,9 @@ class ProjectUpdateInput extends InputType
             'project_type' => [
                 'type' => Type::string(),
             ],
+            'custom_project_type' => [
+                'type' => Type::string(),
+            ],
             'building_type' => [
                 'type' => Type::string(),
             ],

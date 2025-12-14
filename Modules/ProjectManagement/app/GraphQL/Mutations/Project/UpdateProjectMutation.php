@@ -30,7 +30,7 @@ class UpdateProjectMutation extends Mutation
     {
         return [
             'id' => [
-                'type' => Type::nonNull(Type::int()),
+                'type' => Type::nonNull(Type::id()),
             ],
             'input' => [
                 'type' => Type::nonNull(GraphQL::type('ProjectUpdateInput')),

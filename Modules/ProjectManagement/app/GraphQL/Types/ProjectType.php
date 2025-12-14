@@ -36,9 +36,9 @@ class ProjectType extends GraphQLType
                     return null;
                 }
             ],
-            'user_type' => [
+            'entity_type' => [
                 'type' => Type::string(),
-                'description' => 'User type (contractor/consultant/developer)'
+                'description' => 'Entity type (contractor/consultant/developer)'
             ],
             'status' => [
                 'type' => Type::string(),
@@ -95,6 +95,10 @@ class ProjectType extends GraphQLType
             'created_at' => [
                 'type' => Type::string(),
                 'description' => 'Created at timestamp'
+            ],
+            'updated_at' => [
+                'type' => Type::string(),
+                'description' => 'Updated at timestamp'
             ],
             'owner' => [
                 'type' => \GraphQL::type('User'),

@@ -22,7 +22,6 @@ return new class extends Migration
         Schema::connection($this->coreConnection)->create('projects', function (Blueprint $table) {
             $table->id();
 
-            // Core relationships
             $table->foreignId('workspace_id')
                   ->constrained("{$this->coreDatabase}.workspaces")
                   ->cascadeOnDelete();
@@ -42,30 +41,20 @@ return new class extends Migration
                   ->constrained('projects')
                   ->nullOnDelete();
 
-            // Basic project info
             $table->json('name');
             $table->string('code')->unique();
-
-            // Project classification
-            $table->string('user_type')->nullable();
+            $table->string('entity_type')->nullable();
             $table->string('status')->default(ProjectStatusEnum::PLANNING->value);
             $table->string('project_type')->nullable();
             $table->string('custom_project_type')->nullable();
-
-            // Workspace validation flag
             $table->boolean('workspace_details_completed')->default(false);
-
-            // Dates
             $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();
-
             $table->decimal('latitude', 10, 8)->nullable();
             $table->decimal('longitude', 11, 8)->nullable();
             $table->decimal('area', 10, 2)->nullable();
             $table->string('area_unit')->default('m²')->nullable();
-
             $table->json('settings')->nullable();
-
             $table->softDeletes();
             $table->timestamps();
 

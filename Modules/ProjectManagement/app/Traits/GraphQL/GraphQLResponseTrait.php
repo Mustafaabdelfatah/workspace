@@ -10,9 +10,10 @@ trait GraphQLResponseTrait
     protected function successResponse(string $message, $record = null): array
     {
         return [
+            'success' => true,
             'status' => 'success',
             'message' => $message,
-            'record' => $record
+            'project' => $record
         ];
     }
 
@@ -22,9 +23,10 @@ trait GraphQLResponseTrait
     protected function errorResponse(string $message, $record = null): array
     {
         return [
+            'success' => false,
             'status' => 'error',
             'message' => $message,
-            'record' => $record
+            'project' => $record
         ];
     }
 
@@ -34,6 +36,7 @@ trait GraphQLResponseTrait
     protected function successListResponse(string $message, $paginatedData): array
     {
         return [
+            'success' => true,
             'status' => 'success',
             'message' => $message,
             'data' => $paginatedData->items(),
@@ -54,6 +57,7 @@ trait GraphQLResponseTrait
     protected function errorListResponse(string $message): array
     {
         return [
+            'success' => false,
             'status' => 'error',
             'message' => $message,
             'data' => [],
@@ -67,6 +71,7 @@ trait GraphQLResponseTrait
     protected function simpleSuccessResponse(string $message): array
     {
         return [
+            'success' => true,
             'status' => 'success',
             'message' => $message
         ];
@@ -78,6 +83,7 @@ trait GraphQLResponseTrait
     protected function simpleErrorResponse(string $message): array
     {
         return [
+            'success' => false,
             'status' => 'error',
             'message' => $message
         ];

@@ -41,6 +41,10 @@ class ProjectInvitationType extends GraphQLType
                 'type' => Type::string(),
                 'description' => 'Acceptance date'
             ],
+            'declined_at' => [
+                'type' => Type::string(),
+                'description' => 'Decline date'
+            ],
             'invitedUser' => [
                 'type' => \GraphQL::type('User'),
                 'description' => 'Invited user'

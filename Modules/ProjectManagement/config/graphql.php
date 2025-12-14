@@ -24,6 +24,7 @@ return [
             \Modules\ProjectManagement\App\GraphQL\Types\ProjectTypeType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\WorkspaceStatusType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\WorkspaceType::class,
+            \Modules\ProjectManagement\App\GraphQL\Types\PaginatorInfoType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Project\ProjectsResponseType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Project\ProjectSingleResponseType::class,
             \Modules\ProjectManagement\App\GraphQL\Types\Project\UpdateProjectResponseType::class,

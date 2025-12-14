@@ -16,6 +16,10 @@ class ChangeProjectStatusResponseType extends GraphQLType
     public function fields(): array
     {
         return [
+            'success' => [
+                'type' => Type::nonNull(Type::boolean()),
+                'description' => 'Whether the operation was successful'
+            ],
             'status' => [
                 'type' => Type::nonNull(Type::string()),
                 'description' => 'Operation status (success/error)'
@@ -24,7 +28,7 @@ class ChangeProjectStatusResponseType extends GraphQLType
                 'type' => Type::string(),
                 'description' => 'Success or error message'
             ],
-            'record' => [
+            'project' => [
                 'type' => GraphQL::type('Project'),
                 'description' => 'The updated project record'
             ],

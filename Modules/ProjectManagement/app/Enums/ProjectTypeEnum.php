@@ -8,6 +8,9 @@ enum ProjectTypeEnum: string
     case COMMERCIAL = 'commercial';
     case INDUSTRIAL = 'industrial';
     case INFRASTRUCTURE = 'infrastructure';
+    case HOTELS = 'hotels';
+    case HOSPITAL = 'hospital';
+    case EDUCATION = 'education';
     case OTHER = 'other';
 
     public function label(): string

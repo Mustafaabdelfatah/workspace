@@ -14,20 +14,12 @@ class ProjectsResponseType extends GraphQLType
     public function fields(): array
     {
         return [
-            'status' => [
-                'type' => Type::nonNull(Type::boolean()),
-                'description' => 'Response status'
-            ],
-            'message' => [
-                'type' => Type::nonNull(Type::string()),
-                'description' => 'Response message'
-            ],
-            'records' => [
+            'data' => [
                 'type' => Type::listOf(GraphQL::type('Project')),
                 'description' => 'Project records'
             ],
-            'paging' => [
-                'type' => GraphQL::type('Paging'),
+            'paginatorInfo' => [
+                'type' => GraphQL::type('PaginatorInfo'),
                 'description' => 'Pagination information'
             ],
         ];

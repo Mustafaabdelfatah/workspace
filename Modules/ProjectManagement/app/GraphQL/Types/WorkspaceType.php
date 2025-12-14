@@ -21,13 +21,23 @@ class WorkspaceType extends GraphQLType
             'name' => [
                 'type' => GraphQL::type('Translatable'),
                 'resolve' => function ($root) {
-                    // Handle the name field based on how it's stored
-                    if (is_array($root->name)) {
-                        return $root->name;
-                    } elseif (is_string($root->name)) {
-                        return json_decode($root->name, true) ?: null;
+                    if ($root->name) {
+                        if (is_array($root->name)) {
+                            return $root->name;
+                        }
+
+                        if (is_string($root->name)) {
+                            $decoded = json_decode($root->name, true);
+                            return $decoded ?: null;
+                        }
                     }
-                    return null;
+
+                    try {
+                        $translations = $root->getTranslations('name');
+                        return !empty($translations) ? $translations : null;
+                    } catch (\Exception $e) {
+                        return null;
+                    }
                 }
             ],
             'logo_path' => [

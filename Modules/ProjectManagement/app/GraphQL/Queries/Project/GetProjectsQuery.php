@@ -27,6 +27,11 @@ class GetProjectsQuery extends Query
     public function args(): array
     {
         return [
+            'workspaceId' => [
+                'name' => 'workspaceId',
+                'type' => Type::nonNull(Type::id()),
+                'description' => 'Workspace ID to filter projects'
+            ],
             'filter' => [
                 'name' => 'filter',
                 'type' => GraphQL::type('ProjectFilterInput'),
@@ -36,10 +41,11 @@ class GetProjectsQuery extends Query
                 'type' => Type::int(),
                 'defaultValue' => 1,
             ],
-            'per_page' => [
-                'name' => 'per_page',
+            'first' => [
+                'name' => 'first',
                 'type' => Type::int(),
                 'defaultValue' => 20,
+                'description' => 'Number of items per page'
             ],
             'order_by' => [
                 'name' => 'order_by',
@@ -49,25 +55,54 @@ class GetProjectsQuery extends Query
             'order_dir' => [
                 'name' => 'order_dir',
                 'type' => Type::string(),
-                'defaultValue' => 'DESC',
+                'defaultValue' => 'desc',
             ],
         ];
     }
 
     public function resolve($root, array $args): array
     {
+        $workspaceId = $args['workspaceId'];
         $filters = $this->prepareFilters($args);
 
+        // Add workspace ID to filters
+        $filters['workspace_id'] = $workspaceId;
+
         try {
-            $projects = $this->projectService->getFilteredProjects(
+            $paginatedProjects = $this->projectService->getFilteredProjects(
                 filters: $filters,
-                perPage: $args['per_page'],
-                page: $args['page']
+                perPage: $args['first'] ?? 20,
+                page: $args['page'] ?? 1
             );
 
-            return $this->successListResponse('Projects retrieved successfully', $projects);
+            // Format the response to match ProjectsResponseType structure
+            return [
+                'data' => $paginatedProjects->items(),
+                'paginatorInfo' => [
+                    'total' => $paginatedProjects->total(),
+                    'count' => $paginatedProjects->count(),
+                    'currentPage' => $paginatedProjects->currentPage(),
+                    'lastPage' => $paginatedProjects->lastPage(),
+                    'hasMorePages' => $paginatedProjects->hasMorePages(),
+                    'perPage' => $paginatedProjects->perPage(),
+                    'from' => $paginatedProjects->firstItem(),
+                    'to' => $paginatedProjects->lastItem(),
+                ]
+            ];
         } catch (\Exception $e) {
-            return $this->errorListResponse($e->getMessage());
+            return [
+                'data' => [],
+                'paginatorInfo' => [
+                    'total' => 0,
+                    'count' => 0,
+                    'currentPage' => 1,
+                    'lastPage' => 1,
+                    'hasMorePages' => false,
+                    'perPage' => $args['first'] ?? 20,
+                    'from' => null,
+                    'to' => null,
+                ]
+            ];
         }
     }
 
@@ -76,8 +111,8 @@ class GetProjectsQuery extends Query
         $filters = $args['filter'] ?? [];
 
         // Add ordering to filters
-        $filters['order_by'] = $args['order_by'];
-        $filters['order_dir'] = $args['order_dir'];
+        $filters['order_by'] = $args['order_by'] ?? 'created_at';
+        $filters['order_dir'] = $args['order_dir'] ?? 'desc';
 
         return $filters;
     }

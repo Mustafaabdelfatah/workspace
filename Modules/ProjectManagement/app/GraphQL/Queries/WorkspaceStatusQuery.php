@@ -4,6 +4,7 @@ namespace Modules\ProjectManagement\App\GraphQL\Queries;
 
 use GraphQL\Type\Definition\Type;
 use Rebing\GraphQL\Support\Query;
+use Rebing\GraphQL\Support\Facades\GraphQL;
 use Modules\ProjectManagement\App\Services\ProjectService;
 
 class WorkspaceStatusQuery extends Query
@@ -15,7 +16,7 @@ class WorkspaceStatusQuery extends Query
 
     public function type(): Type
     {
-        return \GraphQL::type('WorkspaceStatusType');
+        return GraphQL::type('WorkspaceStatusType');
     }
 
     public function args(): array

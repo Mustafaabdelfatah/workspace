@@ -27,9 +27,9 @@ class CreateProjectInput extends InputType
                 'type' => Type::nonNull(\GraphQL::type('TranslatableInput')),
                 'description' => 'Project name (multilingual)'
             ],
-            'user_type' => [
+            'entity_type' => [
                 'type' => Type::string(),
-                'description' => 'User type (contractor/consultant/developer)'
+                'description' => 'Entity type (contractor/consultant/developer)'
             ],
             'project_type' => [
                 'type' => Type::string(),

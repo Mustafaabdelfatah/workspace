@@ -32,7 +32,7 @@ class GetProjectByIdQuery extends Query
         return [
             'id' => [
                 'name' => 'id',
-                'type' => Type::nonNull(Type::int()),
+                'type' => Type::nonNull(Type::id()),
             ],
             'detailed' => [
                 'name' => 'detailed',
@@ -42,14 +42,14 @@ class GetProjectByIdQuery extends Query
         ];
     }
 
-    public function resolve($root, array $args): array
+    public function resolve($root, array $args)
     {
         $projectId = $args['id'];
 
         // Validate project ID
         $idValidation = $this->validateWithRules(['id' => $projectId], $this->getProjectIdValidationRules());
         if ($idValidation !== null) {
-            return $idValidation;
+            throw new \Exception('Invalid project ID');
         }
 
         try {
@@ -59,15 +59,16 @@ class GetProjectByIdQuery extends Query
             );
 
             if (!$project) {
-                return $this->errorResponse('Project not found');
+                throw new \Exception('Project not found');
             }
 
             // Use the permission trait method
             if (!$this->hasProjectAccess($project, Auth::user())) {
-                return $this->errorResponse('No permission to access this project');
+                throw new \Exception('No permission to access this project');
             }
 
-            return $this->successResponse('Project retrieved successfully', $project);
+            // Return project directly to match the updated ProjectSingleResponseType
+            return $project;
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage());
         }

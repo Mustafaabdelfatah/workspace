@@ -28,7 +28,7 @@ class Project extends BaseModel
         'owner_id',
         'manager_id',
         'parent_project_id',
-        'user_type',
+        'entity_type',
         'project_type',
         'custom_project_type',
         'workspace_details_completed',
