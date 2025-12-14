@@ -96,7 +96,11 @@ class Project extends BaseModel
 
     public function invitations()
     {
-        return $this->hasMany(ProjectInvitation::class);
+        return $this->hasMany(\Modules\Core\Models\Invitation::class, 'workspace_id', 'workspace_id')
+                   ->whereHas('items', function($query) {
+                       $query->where('scope_type', 'project')
+                             ->where('scope_id', $this->id);
+                   });
     }
 
     // Note: Add these relationships when company models are available

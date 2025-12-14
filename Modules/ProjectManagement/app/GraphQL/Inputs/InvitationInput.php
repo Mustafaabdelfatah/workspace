@@ -15,17 +15,21 @@ class InvitationInput extends InputType
     public function fields(): array
     {
         return [
-            'user_id' => [
+            'user_group_id' => [
                 'type' => Type::id(),
-                'description' => 'User ID to invite'
+                'description' => 'User group ID (team) to invite'
             ],
-            'group_id' => [
+            'role_id' => [
                 'type' => Type::id(),
-                'description' => 'User group ID to invite'
+                'description' => 'Role ID from groups table (for email invitations)'
             ],
-            'role' => [
+            'email' => [
                 'type' => Type::string(),
-                'description' => 'Member role'
+                'description' => 'Single email to invite directly'
+            ],
+            'emails' => [
+                'type' => Type::listOf(Type::string()),
+                'description' => 'Array of emails for team invitations'
             ],
             'message' => [
                 'type' => Type::string(),

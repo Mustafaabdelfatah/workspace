@@ -59,7 +59,7 @@ class InvitationRepository
                 'expires_at' => now()->addDays(1),
             ];
 
-        
+
             if (!isset($args['id'])) {
                 $invitationData['token'] = Str::random(64);
             }
@@ -86,7 +86,7 @@ class InvitationRepository
 
             $frontendUrl = env("SITE_CLIENT_URL", "");
             $url = $frontendUrl . "/auth/invitation/{$invitation->token}";
-    
+
             Mail::to($email)->send(new InvitationMail($url, 'en'));
         }
 
@@ -197,4 +197,3 @@ class InvitationRepository
         }
     }
 }
-

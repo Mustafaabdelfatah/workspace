@@ -10,24 +10,37 @@ use Modules\ProjectManagement\App\Models\Project;
 use Modules\ProjectManagement\App\Enums\UserTypeEnum;
 use Modules\ProjectManagement\App\Enums\ProjectTypeEnum;
 use Modules\ProjectManagement\App\Models\ProjectInvitation;
+use Modules\ProjectManagement\App\Http\Requests\CreateProjectRequest;
+use Modules\ProjectManagement\App\Http\Requests\ProjectFilterRequest;
+use Modules\ProjectManagement\App\Filters\ProjectFilterPipeline;
+use Modules\Core\Repositories\InvitationRepository;
 
 class ProjectService
 {
-    public function createProject(array $data): array
+    protected $filterPipeline;
+    protected $invitationRepository;
+
+    public function __construct(ProjectFilterPipeline $filterPipeline, InvitationRepository $invitationRepository)
+    {
+        $this->filterPipeline = $filterPipeline;
+        $this->invitationRepository = $invitationRepository;
+    }
+
+    public function createProject(CreateProjectRequest $request): array
     {
         try {
-            return DB::transaction(function () use ($data) {
-                $workspace = $this->validateWorkspace($data['workspace_id']);
+            return DB::transaction(function () use ($request) {
+                $workspace = $this->validateWorkspace($request->workspace_id);
                 if (!$workspace['success']) {
                     return $workspace;
                 }
 
-                $project = $this->createOrUpdateProject($data);
-                $this->processProjectInvitations($project, $data);
+                $project = $this->createOrUpdateProject($request);
+                $this->processProjectInvitations($project, $request);
 
                 return [
                     'success' => true,
-                    'message' => empty($data['project_id']) ? 'Project created successfully' : 'Project updated successfully',
+                    'message' => empty($request->project_id) ? 'Project created successfully' : 'Project updated successfully',
                     'project' => $project->load(['workspace', 'owner', 'invitations.invitedUser', 'invitations.userGroup'])
                 ];
             });
@@ -64,21 +77,17 @@ class ProjectService
         ];
     }
 
-    private function createOrUpdateProject(array $data): Project
+    private function createOrUpdateProject(CreateProjectRequest $request): Project
     {
-        $projectData = [
-            'workspace_id' => $data['workspace_id'],
-            'name' => $data['name'],
-            'owner_id' => auth()->id(),
-            'entity_type' => $data['entity_type'] ?? null,
-            'project_type' => $data['project_type'] ?? null,
-            'custom_project_type' => $data['custom_project_type'] ?? null,
-            'start_date' => $data['start_date'] ?? null,
-            'end_date' => $data['end_date'] ?? null,
-        ];
+        $projectData = $request->only([
+            'workspace_id', 'name', 'entity_type', 'project_type',
+            'custom_project_type', 'start_date', 'end_date'
+        ]);
 
-        if (isset($data['project_type'])) {
-            $workspace = Workspace::find($data['workspace_id']);
+        $projectData['owner_id'] = auth()->id();
+
+        if ($request->filled('project_type')) {
+            $workspace = Workspace::find($request->workspace_id);
             $projectData['workspace_details_completed'] = $this->isWorkspaceComplete($workspace);
 
             if (!$projectData['workspace_details_completed']) {
@@ -86,71 +95,85 @@ class ProjectService
             }
         }
 
-        if (!empty($data['project_id'])) {
-            $project = Project::where('id', $data['project_id'])
+        if ($request->filled('project_id')) {
+            $project = Project::where('id', $request->project_id)
                             ->where('owner_id', auth()->id())
                             ->firstOrFail();
             $project->update($projectData);
             return $project;
         }
 
-        $projectData['code'] = Project::generateCode($data['workspace_id']);
+        $projectData['code'] = Project::generateCode($request->workspace_id);
 
         return Project::updateOrCreate(
             [
-                'workspace_id' => $data['workspace_id'],
+                'workspace_id' => $request->workspace_id,
                 'owner_id' => auth()->id(),
             ],
             $projectData
         );
     }
 
-    private function processProjectInvitations(Project $project, array $data): void
+    private function processProjectInvitations(Project $project, CreateProjectRequest $request): void
     {
-        if (empty($data['invitations']) || !is_array($data['invitations'])) {
+        if (!$request->has('invitations') || !is_array($request->invitations)) {
             return;
         }
 
-        foreach ($data['invitations'] as $invitation) {
-            $this->createOrUpdateProjectInvitation($project, $invitation);
+        $emails = [];
+        $invitationItems = [];
+
+        foreach ($request->invitations as $invitation) {
+             if (!empty($invitation['user_group_id'])) {
+                 if (!empty($invitation['emails']) && is_array($invitation['emails'])) {
+                    foreach ($invitation['emails'] as $email) {
+                        $emails[] = $email;
+
+                        $invitationItems[] = [
+                            'scope_type' => 'project',
+                            'scope_id' => $project->id,
+                            'user_group_id' => $invitation['user_group_id']
+                        ];
+                    }
+                } else {
+                     $userGroup = UserGroup::find($invitation['user_group_id']);
+                    if ($userGroup) {
+                        $groupUsers = User::whereHas('userGroups', function($query) use ($invitation) {
+                            $query->where('user_group_id', $invitation['user_group_id']);
+                        })->get();
+
+                        foreach ($groupUsers as $user) {
+                            $emails[] = $user->email;
+
+                            $invitationItems[] = [
+                                'scope_type' => 'project',
+                                'scope_id' => $project->id,
+                                'user_group_id' => $invitation['user_group_id']
+                            ];
+                        }
+                    }
+                }
+            }
+
+             if (!empty($invitation['email'])) {
+                $emails[] = $invitation['email'];
+
+                $invitationItems[] = [
+                    'scope_type' => 'project',
+                    'scope_id' => $project->id,
+                    'role_id' => $invitation['role_id'] ?? null
+                ];
+            }
         }
-    }
 
-    private function createOrUpdateProjectInvitation(Project $project, array $invitation): void
-    {
-        $role = $invitation['role'] ?? 'member';
-        $message = $invitation['message'] ?? null;
+        if (!empty($emails)) {
+            $invitationArgs = [
+                'workspace_id' => $project->workspace_id,
+                'emails' => array_unique($emails),
+                'items' => $invitationItems
+            ];
 
-        if (!empty($invitation['user_id'])) {
-            $user = User::find($invitation['user_id']);
-            if (!$user) {
-                throw new \Exception("User with ID {$invitation['user_id']} not found");
-            }
-
-            // Check if invitation already exists for this user (using correct column name)
-            $existingInvitation = ProjectInvitation::where('project_id', $project->id)
-                                                 ->where('invited_user_id', $invitation['user_id'])
-                                                 ->first();
-
-            if (!$existingInvitation) {
-                $project->inviteUser($user, $role, $message);
-            }
-        }
-
-        if (!empty($invitation['group_id'])) {
-            $group = UserGroup::find($invitation['group_id']);
-            if (!$group) {
-                throw new \Exception("Group with ID {$invitation['group_id']} not found");
-            }
-
-            // Check if invitation already exists for this group
-            $existingInvitation = ProjectInvitation::where('project_id', $project->id)
-                                                 ->where('user_group_id', $invitation['group_id'])
-                                                 ->first();
-
-            if (!$existingInvitation) {
-                $project->inviteUserGroup($group, $role, $message);
-            }
+            $this->invitationRepository->sendInvitation($invitationArgs);
         }
     }
 
@@ -186,7 +209,6 @@ class ProjectService
 
         $missing = [];
 
-        // Check if workspace has a name in at least one language
         $hasName = false;
         if ($workspace->name) {
             if (is_array($workspace->name)) {
@@ -239,50 +261,20 @@ class ProjectService
         return $query->find($id);
     }
 
-    public function updateProject(int $id, array $data): Project
+    public function updateProject(int $id, CreateProjectRequest $request): Project
     {
         $project = Project::findOrFail($id);
 
-        // Check if user has permission to update this project
         if ($project->owner_id !== auth()->id()) {
             throw new \Exception('You do not have permission to update this project');
         }
 
-        $updateData = [];
+        $updateData = $request->only([
+            'name', 'entity_type', 'project_type', 'custom_project_type',
+            'start_date', 'end_date', 'manager_id', 'status'
+        ]);
 
-        if (isset($data['name'])) {
-            $updateData['name'] = $data['name'];
-        }
-
-        if (isset($data['entity_type'])) {
-            $updateData['entity_type'] = $data['entity_type'];
-        }
-
-        if (isset($data['project_type'])) {
-            $updateData['project_type'] = $data['project_type'];
-        }
-
-        if (isset($data['custom_project_type'])) {
-            $updateData['custom_project_type'] = $data['custom_project_type'];
-        }
-
-        if (isset($data['start_date'])) {
-            $updateData['start_date'] = $data['start_date'];
-        }
-
-        if (isset($data['end_date'])) {
-            $updateData['end_date'] = $data['end_date'];
-        }
-
-        if (isset($data['manager_id'])) {
-            $updateData['manager_id'] = $data['manager_id'];
-        }
-
-        if (isset($data['status'])) {
-            $updateData['status'] = $data['status'];
-        }
-
-        if (isset($data['project_type'])) {
+        if ($request->filled('project_type')) {
             $workspace = Workspace::find($project->workspace_id);
             $updateData['workspace_details_completed'] = $this->isWorkspaceComplete($workspace);
 
@@ -291,10 +283,10 @@ class ProjectService
             }
         }
 
-        $project->update($updateData);
+        $project->update(array_filter($updateData, fn($value) => $value !== null));
 
-        if (isset($data['invitations']) && is_array($data['invitations'])) {
-            $this->processProjectInvitations($project, $data);
+        if ($request->has('invitations') && is_array($request->invitations)) {
+            $this->processProjectInvitations($project, $request);
         }
 
         return $project->load(['workspace', 'owner', 'manager', 'invitations.invitedUser', 'invitations.userGroup']);
@@ -304,12 +296,10 @@ class ProjectService
     {
         $project = Project::findOrFail($projectId);
 
-        // Check if user has permission to change this project's status
         if ($project->owner_id !== auth()->id()) {
             throw new \Exception('You do not have permission to change this project status');
         }
 
-        // Update the project status
         $project->update(['status' => $status]);
 
         return $project->load(['workspace', 'owner', 'manager', 'invitations.invitedUser', 'invitations.userGroup']);
@@ -335,43 +325,17 @@ class ProjectService
         }, ProjectTypeEnum::cases());
     }
 
-    public function getFilteredProjects(array $filters, int $perPage = 20, int $page = 1)
+    public function getFilteredProjects(ProjectFilterRequest $request)
     {
+        $perPage = $request->per_page ?? 20;
+        $page = $request->page ?? 1;
+        $orderBy = $request->order_by ?? 'created_at';
+        $orderDir = $request->order_dir ?? 'desc';
 
         $query = Project::query()->with(['owner', 'manager', 'workspace']);
 
-        if (isset($filters['workspace_id'])) {
-            $query->where('workspace_id', $filters['workspace_id']);
-        }
+        $query = $this->filterPipeline->apply($query, $request->validated());
 
-        if (isset($filters['status']) && !empty($filters['status'])) {
-            $query->where('status', $filters['status']);
-        }
-
-        if (isset($filters['project_type']) && !empty($filters['project_type'])) {
-            $query->where('project_type', $filters['project_type']);
-        }
-
-        if (isset($filters['entity_type']) && !empty($filters['entity_type'])) {
-            $query->where('entity_type', $filters['entity_type']);
-        }
-
-        if (isset($filters['search']) && !empty($filters['search'])) {
-            $query->where(function($q) use ($filters) {
-                $searchTerm = $filters['search'];
-                $q->whereRaw("JSON_EXTRACT(name, '$.en') LIKE ?", ["%{$searchTerm}%"])
-                  ->orWhereRaw("JSON_EXTRACT(name, '$.ar') LIKE ?", ["%{$searchTerm}%"])
-                  ->orWhere('code', 'LIKE', "%{$searchTerm}%");
-            });
-        }
-
-        if (isset($filters['owner_only']) && $filters['owner_only']) {
-            $query->where('owner_id', auth()->id());
-        }
-
-        // Apply ordering
-        $orderBy = $filters['order_by'] ?? 'created_at';
-        $orderDir = $filters['order_dir'] ?? 'desc';
         $query->orderBy($orderBy, $orderDir);
 
         return $query->paginate($perPage, ['*'], 'page', $page);

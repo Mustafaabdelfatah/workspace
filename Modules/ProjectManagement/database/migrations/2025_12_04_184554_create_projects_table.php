@@ -42,7 +42,7 @@ return new class extends Migration
                   ->nullOnDelete();
 
             $table->json('name');
-            $table->string('code')->unique();
+            $table->string('code')->nullable();
             $table->string('entity_type')->nullable();
             $table->string('status')->default(ProjectStatusEnum::PLANNING->value);
             $table->string('project_type')->nullable();

@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Modules\Core\Database\Seeders\CoreDatabaseSeeder;
-use Modules\Law\Database\Seeders\LawDatabaseSeeder;
+use Modules\ProjectManagement\Database\Seeders\ProjectManagementDatabaseSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
          $this->call(CoreDatabaseSeeder::class);
+         $this->call(ProjectManagementDatabaseSeeder::class);
         //  $this->call(LawDatabaseSeeder::class);
     }
 }
